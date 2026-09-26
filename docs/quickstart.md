@@ -24,8 +24,8 @@ real commands and ground-truth documents, not the demo's paths.
 Clone the source, then run the installer from that checkout:
 
 ```sh
-git clone https://github.com/RoshFps/ai-software-toolkit.git
-cd ai-software-toolkit
+git clone https://github.com/RoshFps/SkrillX.git
+cd SkrillX
 python3 tooling/install.py --target /path/to/repo --dry-run
 python3 tooling/install.py --target /path/to/repo
 ```
