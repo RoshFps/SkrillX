@@ -243,14 +243,19 @@ class CompletionTests(unittest.TestCase):
 
 class LauncherTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("bash"), "bash is not installed")
-    def test_launcher_runs_through_a_symlink_from_any_directory(self) -> None:
+    def test_launcher_wrapper_runs_from_any_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             prefix = Path(directory) / "bin"
             completed = subprocess.run(["bash", str(ROOT / "tooling" / "install-cli.sh"), "--prefix", str(prefix)],
                                        text=True, capture_output=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             link = prefix / "ai-toolkit"
-            self.assertTrue(link.is_symlink())
+            self.assertTrue(link.is_file())
+            self.assertIn("written by tooling/install-cli.sh", link.read_text(encoding="utf-8"))
+            # Installing again replaces the managed wrapper instead of refusing.
+            completed = subprocess.run(["bash", str(ROOT / "tooling" / "install-cli.sh"), "--prefix", str(prefix)],
+                                       text=True, capture_output=True)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
             completed = subprocess.run([str(link), "--version"], cwd=directory, text=True, capture_output=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertIn("ai-toolkit", completed.stdout)
