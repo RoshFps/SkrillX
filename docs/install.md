@@ -15,7 +15,19 @@ for GitHub. Python 3.11+ is the only prerequisite.
 
 ## Get the CLI
 
-Either run it from a source checkout:
+The quickest way is to put the checkout's launcher on your `PATH`:
+
+```bash
+git clone https://github.com/RoshFps/ai-software-toolkit.git
+bash ai-software-toolkit/tooling/install-cli.sh       # links ~/.local/bin/ai-toolkit
+ai-toolkit --version
+```
+
+`bash tooling/install-cli.sh --prefix DIR` links somewhere else and `--uninstall` removes
+the link. The link points at the checkout, so `git pull` updates the command.
+Set `AI_TOOLKIT_PYTHON` to choose the interpreter (Python 3.11+).
+
+You can also run it directly from a source checkout:
 
 ```bash
 python3 <toolkit-root>/tooling/ai_toolkit --version
@@ -65,6 +77,37 @@ On a repository that already has `.guardrails/`, `init` fills gaps only and
 records the installation; it never rewrites an installed runtime. Use `update`
 to refresh.
 
+## Everyday commands
+
+| Command | What it does |
+| --- | --- |
+| `ai-toolkit` | Prints a five-step quick start. |
+| `ai-toolkit check --html` | Runs the scan, prints a summary, and writes `.artifacts/ai-toolkit/scorecard.html`. |
+| `ai-toolkit report` | Shows the last check again without rescanning. |
+| `ai-toolkit report --open` | Writes the HTML scorecard and opens it in your browser. |
+| `ai-toolkit skills list` | Every skill with a one-line description on a terminal (`*` marks the starter set); one name per line when piped, or use `--long`. |
+| `ai-toolkit skills search WORDS` | Finds skills by name or description (for example `skills search security`). |
+| `ai-toolkit skills show NAME` | A skill's full description, files, and install command. |
+| `ai-toolkit completion bash\|zsh\|fish` | Prints a tab-completion script for your shell. |
+
+The HTML scorecard is a single offline file (no network requests) with
+status filters, search, and light/dark themes; it only displays the
+evaluator's statuses and never recomputes them. `check` also saves the result
+card to `.artifacts/ai-toolkit/last-check.json`, which `report` reads.
+
+Terminal output is colored only on an interactive terminal. Pipes, CI logs,
+and `--json` stay plain; `--no-color` or `NO_COLOR=1` turns color off and
+`FORCE_COLOR=1` turns it on. A mistyped command gets a suggestion
+(`ai-toolkit doctr` → "Did you mean `ai-toolkit doctor`?").
+
+Install completion once, for example:
+
+```bash
+ai-toolkit completion bash > ~/.local/share/bash-completion/completions/ai-toolkit
+ai-toolkit completion zsh  > "${fpath[1]}/_ai-toolkit"
+ai-toolkit completion fish > ~/.config/fish/completions/ai-toolkit.fish
+```
+
 ### Repository commands stay in repository variables
 
 Discovered commands are printed as `gh variable set GUARDRAILS_..._COMMAND`
@@ -79,7 +122,7 @@ Commit this file. It holds only what nothing else owns:
 
 ```toml
 [toolkit]
-revision = "v2.1.0"
+revision = "v2.2.0"
 components = ["guardrails", "skills", "qa"]
 
 [agents]
