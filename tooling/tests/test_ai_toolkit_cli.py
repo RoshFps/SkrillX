@@ -171,7 +171,7 @@ class DiscoverAndInitTests(CliFixture):
         (self.target / ".gitignore").write_text("node_modules", encoding="utf-8")
         found = {"languages": [{"language": "python"}]}
         self.assertTrue(cli.ensure_gitignore(self.target, found))
-        self.assertEqual((self.target / ".gitignore").read_text(encoding="utf-8"), "node_modules\n# AI Software Toolkit scan artifacts\n.artifacts/\n__pycache__/\n")
+        self.assertEqual((self.target / ".gitignore").read_text(encoding="utf-8"), "node_modules\n# SkrillX scan artifacts\n.artifacts/\n__pycache__/\n")
         self.assertFalse(cli.ensure_gitignore(self.target, found))
         self.assertEqual(cli.gitignore_additions(self.target, {"languages": []}), [])
 
@@ -207,7 +207,7 @@ class DoctorCheckTests(CliFixture):
         code, out, _ = run_cli("doctor", "--target", str(self.target))
         self.assertEqual(code, 1)
         self.assertIn("missing    guardrails", out)
-        self.assertIn("Run `ai-toolkit init`", out)
+        self.assertIn("Run `skrillx init`", out)
         code, _, err = run_cli("check", "--target", str(self.target))
         self.assertEqual(code, 2)
         self.assertIn("not installed", err)
@@ -412,7 +412,7 @@ class EntryPointTests(unittest.TestCase):
     def test_module_entry_point(self):
         completed = subprocess.run([sys.executable, str(ROOT / "tooling" / "ai_toolkit"), "--version"], text=True, capture_output=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("ai-toolkit", completed.stdout)
+        self.assertIn("skrillx", completed.stdout)
         completed = subprocess.run([sys.executable, "-m", "ai_toolkit", "skills", "list"], cwd=ROOT / "tooling", text=True, capture_output=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
