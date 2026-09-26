@@ -18,8 +18,8 @@ for GitHub. Python 3.11+ is the only prerequisite.
 The quickest way is to put the checkout's launcher on your `PATH`:
 
 ```bash
-git clone https://github.com/RoshFps/ai-software-toolkit.git
-bash ai-software-toolkit/tooling/install-cli.sh       # installs ~/.local/bin/skrillx
+git clone https://github.com/RoshFps/SkrillX.git
+bash SkrillX/tooling/install-cli.sh   # installs ~/.local/bin/skrillx
 skrillx --version
 ```
 
