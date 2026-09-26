@@ -76,6 +76,7 @@ jobs:
           curl --fail --silent --show-error --location \
             --output "${RUNNER_TEMP}/skrillx/skrillx.pyz" \
             "https://github.com/RoshFps/ai-software-toolkit/releases/download/${TOOLKIT_TAG}/skrillx.pyz"
+            "https://github.com/RoshFps/SkrillX/releases/download/${TOOLKIT_TAG}/skrillx.pyz"
           echo "${ARCHIVE_SHA256}  ${RUNNER_TEMP}/skrillx/skrillx.pyz" | sha256sum --check --strict
 
       - name: Preview the installation
