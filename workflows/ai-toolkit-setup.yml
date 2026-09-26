@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       toolkit-tag:
-        description: Toolkit release tag that publishes ai-toolkit.pyz (for example v2.1.0).
+        description: Toolkit release tag that publishes ai-toolkit.pyz (for example v2.2.0).
         required: true
         type: string
       archive-sha256:
@@ -65,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ ! "${TOOLKIT_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
-            echo "::error::toolkit-tag must be a release tag such as v2.1.0" >&2
+            echo "::error::toolkit-tag must be a release tag such as v2.2.0" >&2
             exit 1
           fi
           if [[ ! "${ARCHIVE_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
@@ -75,7 +75,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/ai-toolkit"
           curl --fail --silent --show-error --location \
             --output "${RUNNER_TEMP}/ai-toolkit/ai-toolkit.pyz" \
-            "https://github.com/ravisingh11/ai-software-toolkit/releases/download/${TOOLKIT_TAG}/ai-toolkit.pyz"
+            "https://github.com/RoshFps/ai-software-toolkit/releases/download/${TOOLKIT_TAG}/ai-toolkit.pyz"
           echo "${ARCHIVE_SHA256}  ${RUNNER_TEMP}/ai-toolkit/ai-toolkit.pyz" | sha256sum --check --strict
 
       - name: Preview the installation

@@ -8,6 +8,7 @@ caller chooses ``merge`` (add missing files) or ``replace``.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,52 @@ def source_dir() -> Path:
 
 def canonical_skills() -> list[str]:
     return sorted(path.parent.name for path in source_dir().glob("*/SKILL.md"))
+
+
+def skill_description(name: str) -> str:
+    """The ``description`` from a skill's SKILL.md front matter, or an empty string."""
+    path = source_dir() / name / "SKILL.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    if not text.startswith("---"):
+        return ""
+    front = text[3:].split("\n---", 1)[0]
+    for line in front.splitlines():
+        key, _, value = line.partition(":")
+        if key.strip() == "description":
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                value = value[1:-1]
+            return value.replace('\\"', '"').strip()
+    return ""
+
+
+def skill_catalog() -> list[dict[str, Any]]:
+    """Every canonical skill with its description and whether it is in the starter set."""
+    return [{"name": name, "description": skill_description(name), "starter": name in STARTER_SKILLS}
+            for name in canonical_skills()]
+
+
+def search_skills(query: str) -> list[dict[str, Any]]:
+    """Skills whose name or description contains every word of ``query`` (case-insensitive).
+
+    Results are ranked: name matches first, then by how early the first word appears.
+    """
+    words = [word for word in query.lower().split() if word]
+    if not words:
+        return skill_catalog()
+    # A word matches at the start of a word ("test" finds tests/testing, not "latest").
+    patterns = [re.compile(r"(?<![a-z0-9])" + re.escape(word)) for word in words]
+    matches = []
+    for row in skill_catalog():
+        haystack = (row["name"] + " " + row["description"]).lower()
+        found = [pattern.search(haystack) for pattern in patterns]
+        if all(found):
+            in_name = sum(bool(pattern.search(row["name"].lower())) for pattern in patterns)
+            matches.append((-in_name, found[0].start(), row["name"], row))
+    return [row for *_, row in sorted(matches, key=lambda item: item[:3])]
 
 
 def client_user_dir(client: str, environment: dict[str, str] | None = None) -> Path:

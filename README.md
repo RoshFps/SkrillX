@@ -3,21 +3,50 @@
 **Move fast. Prove it works.** Shared skills, QA workflows, and Proof checks for
 planning, building, testing, securing, and releasing software with AI.
 
+[![License](https://img.shields.io/github/license/RoshFps/ai-software-toolkit?label=license)](LICENSE)
+[![Scorecard Workflow](https://github.com/RoshFps/ai-software-toolkit/actions/workflows/guardrails-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/ai-software-toolkit/actions/workflows/guardrails-scorecard.yml)
+
 AI Software Toolkit supports development, QA, security, and release teams.
 Skills guide repeatable work, functional QA exercises application behavior,
 and Proof connects verification results to policy through revision-bound
 checks and readable scorecards. Your repository owns its architecture,
 acceptance criteria, and commands.
 
-I built this because AI lets me create more code and ship changes faster than
-ever. I wanted that speed without losing confidence in what I ship: lightweight
-skills and checks that run with the work, with quality considered from the
-first acceptance criterion through release and feedback.
+Maintained by [Roshan Immanuel](https://github.com/RoshFps). See
+[NOTICE](NOTICE) and [LICENSE](LICENSE) for attribution.
 
-The repository is **`ravisingh11/ai-software-toolkit`**, formerly
-`ravisingh11/engineering-standards`. Existing forks remain connected. See the
-[rename migration guide](docs/repository-rename.md) for remote, workflow, and
-Pages updates; the repository rename did not change the runtime contract.
+## Get going in one minute
+
+```sh
+git clone https://github.com/RoshFps/ai-software-toolkit.git
+bash ai-software-toolkit/tooling/install-cli.sh   # puts `ai-toolkit` on your PATH
+cd /path/to/your/repo
+ai-toolkit                                   # prints the quick start
+```
+
+| Step | Command | What happens |
+| --- | --- | --- |
+| 1 | `ai-toolkit discover` | Detects languages, build/test/lint commands, workflows, and agent clients. Read-only. |
+| 2 | `ai-toolkit init --preview` | Shows every file it would add. Nothing is written. |
+| 3 | `ai-toolkit init --yes` | Installs Proof, the starter skills, and QA bootstrap. |
+| 4 | `ai-toolkit doctor` | Reports what is installed, configured, and verified, and the next step for each gap. |
+| 5 | `ai-toolkit check --html` | Runs the scan and writes an HTML scorecard dashboard. |
+
+What's new in this version:
+
+- **HTML scorecard dashboard.** `ai-toolkit check --html` or
+  `ai-toolkit report --open` renders the latest result as a single offline page
+  with status filters, search, and light/dark themes.
+- **Clearer terminal output.** Colored PASS / FAIL / NO_RESULT, a one-line
+  summary, a quick start when run bare, and "did you mean" hints for typos.
+  Plain output in pipes and CI, or with `--no-color` / `NO_COLOR=1`.
+- **Find skills fast.** `ai-toolkit skills list` shows what each skill does;
+  `skills search security` and `skills show code-review` find and explain one.
+- **Tab completion.** `ai-toolkit completion bash|zsh|fish`.
+- **Faster test runs.** `tooling/test.sh` runs test modules in parallel.
+- **Up-to-date pins.** The workflow templates pin every GitHub Action to its latest release.
+
+See the [changelog](CHANGELOG.md#unreleased) for details.
 
 ## What the toolkit brings together
 
@@ -61,7 +90,7 @@ get a scorecard.
 
 ```sh
 demo_workspace="$(mktemp -d)"
-git clone --branch v1.0.0 https://github.com/ravisingh11/ai-software-toolkit.git "$demo_workspace/ai-software-toolkit"
+git clone https://github.com/RoshFps/ai-software-toolkit.git "$demo_workspace/ai-software-toolkit"
 standards_root="$demo_workspace/ai-software-toolkit"
 cp -R "$standards_root/examples/python-demo" "$demo_workspace/python-demo"
 cd "$demo_workspace/python-demo"
@@ -270,6 +299,6 @@ before changing or refreshing them.
 MIT licensed; third-party tools keep their own terms. See
 [licensing](docs/licensing.md), [contributing](CONTRIBUTING.md), and the
 [complete validation commands](AGENTS.md#verification).
-Run `tooling/test.sh` for the repository's four unit-test suites.
+Run `tooling/test.sh` for the repository's four unit-test suites (in parallel; `-j 1` runs them one at a time).
 Read the [changelog](CHANGELOG.md) and [v1.0.0 release notes](docs/releases/v1.0.0.md)
 for supported contracts, upgrade instructions, and limitations.
