@@ -40,7 +40,7 @@ def global_options(parser: argparse.ArgumentParser) -> list[str]:
     return sorted({flag for action in parser._actions for flag in action.option_strings if flag.startswith("--")})
 
 
-def bash(parser: argparse.ArgumentParser, program: str = "ai-toolkit") -> str:
+def bash(parser: argparse.ArgumentParser, program: str = "skrillx") -> str:
     commands = describe(parser)
     cases = []
     for name, info in commands.items():
@@ -78,7 +78,7 @@ complete -F {function} {program}
 """
 
 
-def zsh(parser: argparse.ArgumentParser, program: str = "ai-toolkit") -> str:
+def zsh(parser: argparse.ArgumentParser, program: str = "skrillx") -> str:
     commands = describe(parser)
     described = "\n".join(f"    {shlex.quote(name + ':' + str(info['help']).replace(':', ' -'))}" for name, info in commands.items())
     cases = []
@@ -105,7 +105,7 @@ compdef _{program.replace("-", "_")} {program}
 """
 
 
-def fish(parser: argparse.ArgumentParser, program: str = "ai-toolkit") -> str:
+def fish(parser: argparse.ArgumentParser, program: str = "skrillx") -> str:
     commands = describe(parser)
     lines = [f"# fish completion for {program}. Install with:",
              f"#   {program} completion fish > ~/.config/fish/completions/{program}.fish",

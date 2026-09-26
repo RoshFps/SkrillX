@@ -1,6 +1,6 @@
 # Guardrails v2 workflows
 
-These workflows provide Guardrails evidence within [AI Software Toolkit](../docs/vision.md).
+These workflows provide Guardrails evidence within [SkrillX](../docs/vision.md).
 For consumer-specific functional QA workflows, start with
 [QA bootstrap](../skills/qa-bootstrap/SKILL.md).
 
@@ -190,11 +190,11 @@ See [ruleset guidance](../rulesets/README.md) before adding contexts.
 
 ## Starter workflow
 
-`ai-toolkit-setup.yml` is not installed by the installer. Copy it into a
+`skrillx-setup.yml` is not installed by the installer. Copy it into a
 consuming repository's `.github/workflows/` and run it manually
-(`workflow_dispatch`). It downloads `ai-toolkit.pyz` from the pinned release
+(`workflow_dispatch`). It downloads `skrillx.pyz` from the pinned release
 tag you supply, verifies it against the SHA-256 you supply, runs
-`ai-toolkit init --preview` into the job summary, and, when `apply=true`,
-commits the installation to an `ai-toolkit/setup-<tag>` branch and opens a
+`skrillx init --preview` into the job summary, and, when `apply=true`,
+commits the installation to a `skrillx/setup-<tag>` branch and opens a
 pull request with `gh`. Discovered repository commands appear in the preview
 as `gh variable set` lines; the workflow never writes them into the tree.

@@ -29,7 +29,7 @@ class BuildArchiveTests(unittest.TestCase):
         cls.module = load()
         cls.temp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.temp.name).resolve()
-        cls.archive, cls.checksum = cls.module.build(cls.root / "dist" / "ai-toolkit.pyz", build_revision="vTEST")
+        cls.archive, cls.checksum = cls.module.build(cls.root / "dist" / "skrillx.pyz", build_revision="vTEST")
 
     @classmethod
     def tearDownClass(cls):
@@ -50,7 +50,7 @@ class BuildArchiveTests(unittest.TestCase):
         self.assertTrue(self.archive.is_file())
         self.assertTrue(self.module.verify(self.archive))
         digest, name = self.checksum.read_text(encoding="utf-8").split()
-        self.assertEqual(name, "ai-toolkit.pyz")
+        self.assertEqual(name, "skrillx.pyz")
         self.assertEqual(digest, self.module.sha256_file(self.archive))
         with zipfile.ZipFile(self.archive) as bundle:
             names = set(bundle.namelist())
@@ -82,7 +82,7 @@ class BuildArchiveTests(unittest.TestCase):
         self.assertTrue((self.root / "xdg" / "ai-toolkit").is_dir())
 
     def test_main_builds_and_verifies(self):
-        output = self.root / "out" / "ai-toolkit.pyz"
+        output = self.root / "out" / "skrillx.pyz"
         with patch.object(sys, "argv", ["build_archive.py", "--output", str(output), "--revision", "vMAIN"]), contextlib.redirect_stdout(io.StringIO()) as stdout:
             self.assertEqual(self.module.main(), 0)
         self.assertIn("Built", stdout.getvalue())

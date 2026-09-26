@@ -1,4 +1,4 @@
-# AI Software Toolkit
+# SkrillX
 
 **Move fast. Prove it works.** Shared skills, QA workflows, and guardrails for
 planning, building, testing, securing, and releasing software with AI.
@@ -6,7 +6,7 @@ planning, building, testing, securing, and releasing software with AI.
 [![License](https://img.shields.io/github/license/RoshFps/ai-software-toolkit?label=license)](LICENSE)
 [![Scorecard Workflow](https://github.com/RoshFps/ai-software-toolkit/actions/workflows/guardrails-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/ai-software-toolkit/actions/workflows/guardrails-scorecard.yml)
 
-AI Software Toolkit supports development, QA, security, and release teams.
+SkrillX supports development, QA, security, and release teams.
 Skills guide repeatable work, functional QA exercises application behavior,
 and Guardrails connects verification results to policy through revision-bound
 checks and readable scorecards. Your repository owns its architecture,
@@ -19,30 +19,30 @@ Maintained by [Roshan Immanuel](https://github.com/RoshFps). See
 
 ```sh
 git clone https://github.com/RoshFps/ai-software-toolkit.git
-bash ai-software-toolkit/tooling/install-cli.sh   # puts `ai-toolkit` on your PATH
+bash ai-software-toolkit/tooling/install-cli.sh   # puts `skrillx` on your PATH
 cd /path/to/your/repo
-ai-toolkit                                   # prints the quick start
+skrillx                                           # prints the quick start
 ```
 
 | Step | Command | What happens |
 | --- | --- | --- |
-| 1 | `ai-toolkit discover` | Detects languages, build/test/lint commands, workflows, and agent clients. Read-only. |
-| 2 | `ai-toolkit init --preview` | Shows every file it would add. Nothing is written. |
-| 3 | `ai-toolkit init --yes` | Installs Guardrails, the starter skills, and QA bootstrap. |
-| 4 | `ai-toolkit doctor` | Reports what is installed, configured, and verified, and the next step for each gap. |
-| 5 | `ai-toolkit check --html` | Runs the scan and writes an HTML scorecard dashboard. |
+| 1 | `skrillx discover` | Detects languages, build/test/lint commands, workflows, and agent clients. Read-only. |
+| 2 | `skrillx init --preview` | Shows every file it would add. Nothing is written. |
+| 3 | `skrillx init --yes` | Installs Guardrails, the starter skills, and QA bootstrap. |
+| 4 | `skrillx doctor` | Reports what is installed, configured, and verified, and the next step for each gap. |
+| 5 | `skrillx check --html` | Runs the scan and writes an HTML scorecard dashboard. |
 
 What's new in this version:
 
-- **HTML scorecard dashboard.** `ai-toolkit check --html` or
-  `ai-toolkit report --open` renders the latest result as a single offline page
+- **HTML scorecard dashboard.** `skrillx check --html` or
+  `skrillx report --open` renders the latest result as a single offline page
   with status filters, search, and light/dark themes.
 - **Clearer terminal output.** Colored PASS / FAIL / NO_RESULT, a one-line
   summary, a quick start when run bare, and "did you mean" hints for typos.
   Plain output in pipes and CI, or with `--no-color` / `NO_COLOR=1`.
-- **Find skills fast.** `ai-toolkit skills list` shows what each skill does;
+- **Find skills fast.** `skrillx skills list` shows what each skill does;
   `skills search security` and `skills show code-review` find and explain one.
-- **Tab completion.** `ai-toolkit completion bash|zsh|fish`.
+- **Tab completion.** `skrillx completion bash|zsh|fish`.
 - **Faster test runs.** `tooling/test.sh` runs test modules in parallel.
 - **Up-to-date pins.** The workflow templates pin every GitHub Action to its latest release.
 
@@ -128,14 +128,14 @@ not a pass.
 
 ## Install
 
-The shared [`ai-toolkit` CLI](docs/install.md) is the front door for Guardrails,
+The shared [`skrillx` CLI](docs/install.md) is the front door for Guardrails,
 skills, and QA bootstrap: `discover` and `init --preview` are read-only,
 `init --yes` installs the selected components and records `toolkit.toml` and
 `toolkit.lock.json`, `doctor` reports installed / configured / verified state
 without executing anything, `check` explains what ran, failed, and remains
 unverified, and `update` refreshes managed files while preserving your edits.
 The same code serves the CLI, the `toolkit-setup` skill, and the
-`AI Toolkit Setup` starter workflow.
+`SkrillX Setup` starter workflow.
 
 For the underlying installer, [preview and install Core](docs/quickstart.md#1-preview-and-install-core),
 then [configure real commands](docs/quickstart.md#3-configure-repository-commands)

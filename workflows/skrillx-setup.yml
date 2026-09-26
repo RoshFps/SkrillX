@@ -1,4 +1,4 @@
-name: AI Toolkit Setup
+name: SkrillX Setup
 
 # Starter workflow: copy this file into .github/workflows/ of a consuming
 # repository, then run it manually. It downloads a pinned toolkit archive,
@@ -10,11 +10,11 @@ on:
   workflow_dispatch:
     inputs:
       toolkit-tag:
-        description: Toolkit release tag that publishes ai-toolkit.pyz (for example v2.2.0).
+        description: Toolkit release tag that publishes skrillx.pyz (for example v2.2.0).
         required: true
         type: string
       archive-sha256:
-        description: Expected SHA-256 of ai-toolkit.pyz from that release's ai-toolkit.pyz.sha256 asset.
+        description: Expected SHA-256 of skrillx.pyz from that release's skrillx.pyz.sha256 asset.
         required: true
         type: string
       components:
@@ -34,7 +34,7 @@ on:
         default: false
 
 concurrency:
-  group: ai-toolkit-setup-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  group: skrillx-setup-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -42,7 +42,7 @@ permissions:
 
 jobs:
   setup:
-    name: AI Toolkit Setup
+    name: SkrillX Setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -72,23 +72,23 @@ jobs:
             echo "::error::archive-sha256 must be a 64-character lowercase hex digest" >&2
             exit 1
           fi
-          mkdir -p "${RUNNER_TEMP}/ai-toolkit"
+          mkdir -p "${RUNNER_TEMP}/skrillx"
           curl --fail --silent --show-error --location \
-            --output "${RUNNER_TEMP}/ai-toolkit/ai-toolkit.pyz" \
-            "https://github.com/RoshFps/ai-software-toolkit/releases/download/${TOOLKIT_TAG}/ai-toolkit.pyz"
-          echo "${ARCHIVE_SHA256}  ${RUNNER_TEMP}/ai-toolkit/ai-toolkit.pyz" | sha256sum --check --strict
+            --output "${RUNNER_TEMP}/skrillx/skrillx.pyz" \
+            "https://github.com/RoshFps/ai-software-toolkit/releases/download/${TOOLKIT_TAG}/skrillx.pyz"
+          echo "${ARCHIVE_SHA256}  ${RUNNER_TEMP}/skrillx/skrillx.pyz" | sha256sum --check --strict
 
       - name: Preview the installation
         shell: bash
         run: |
           set -euo pipefail
-          python3 "${RUNNER_TEMP}/ai-toolkit/ai-toolkit.pyz" init --target . --preview \
-            --components "${COMPONENTS}" --clients "${CLIENTS}" | tee "${RUNNER_TEMP}/ai-toolkit/preview.txt"
+          python3 "${RUNNER_TEMP}/skrillx/skrillx.pyz" init --target . --preview \
+            --components "${COMPONENTS}" --clients "${CLIENTS}" | tee "${RUNNER_TEMP}/skrillx/preview.txt"
           {
-            echo '## AI Toolkit setup preview'
+            echo '## SkrillX setup preview'
             echo
             echo '```text'
-            cat "${RUNNER_TEMP}/ai-toolkit/preview.txt"
+            cat "${RUNNER_TEMP}/skrillx/preview.txt"
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -97,18 +97,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          branch="ai-toolkit/setup-${TOOLKIT_TAG}"
+          branch="skrillx/setup-${TOOLKIT_TAG}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "${branch}"
-          python3 "${RUNNER_TEMP}/ai-toolkit/ai-toolkit.pyz" init --target . --yes \
+          python3 "${RUNNER_TEMP}/skrillx/skrillx.pyz" init --target . --yes \
             --components "${COMPONENTS}" --clients "${CLIENTS}"
           git add -A
           if git diff --cached --quiet; then
             echo "Nothing to install; the repository already matches the toolkit." >> "${GITHUB_STEP_SUMMARY}"
             exit 0
           fi
-          git commit -m "chore: set up AI Software Toolkit ${TOOLKIT_TAG}"
+          git commit -m "chore: set up SkrillX ${TOOLKIT_TAG}"
           git push --set-upstream origin "${branch}"
-          gh pr create --title "chore: set up AI Software Toolkit ${TOOLKIT_TAG}" \
-            --body-file "${RUNNER_TEMP}/ai-toolkit/preview.txt" --head "${branch}"
+          gh pr create --title "chore: set up SkrillX ${TOOLKIT_TAG}" \
+            --body-file "${RUNNER_TEMP}/skrillx/preview.txt" --head "${branch}"

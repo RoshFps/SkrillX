@@ -1,6 +1,6 @@
-# AI Software Toolkit: vision and scope
+# SkrillX: vision and scope
 
-AI Software Toolkit helps development, QA, security, and release teams turn
+SkrillX helps development, QA, security, and release teams turn
 AI-assisted work into software they can verify and maintain. It brings shared
 skills, standards, verification workflows, and the Guardrails evidence runtime
 together. Teams adopt the components that fit their repository and workflow.

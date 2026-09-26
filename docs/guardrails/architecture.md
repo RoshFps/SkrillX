@@ -1,6 +1,6 @@
 # Guardrails v2 architecture
 
-Guardrails is the evidence and policy component of [AI Software Toolkit](../vision.md).
+Guardrails is the evidence and policy component of [SkrillX](../vision.md).
 This document defines that component's runtime contracts; the toolkit also
 provides skills and QA workflows with their own adoption paths.
 

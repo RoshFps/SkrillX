@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions to AI Software Toolkit should help development, QA, security,
+Contributions to SkrillX should help development, QA, security,
 and release teams perform reusable work and verify the results. Keep the
 distinction between policy, implemented capabilities, and aspiration clear.
 See [the vision and maturity map](docs/vision.md).

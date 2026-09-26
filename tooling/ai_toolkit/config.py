@@ -25,7 +25,7 @@ TOML_NAME = "toolkit.toml"
 LOCK_NAME = "toolkit.lock.json"
 LOCK_VERSION = 1
 
-TOML_TEMPLATE = """# AI Software Toolkit configuration. Policy and provider selection live in
+TOML_TEMPLATE = """# SkrillX configuration. Policy and provider selection live in
 # .guardrails/ and are changed with .guardrails/configure.py; repository
 # commands live in GitHub repository variables, never in this file.
 

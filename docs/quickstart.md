@@ -1,6 +1,6 @@
 # Guardrails v2 quick start
 
-This guide installs the Guardrails component of [AI Software Toolkit](vision.md).
+This guide installs the Guardrails component of [SkrillX](vision.md).
 For other entry points, [install skills](../skills/README.md#install-locally)
 or [set up functional QA](../skills/qa-bootstrap/SKILL.md) from a source revision
 containing those capabilities.
