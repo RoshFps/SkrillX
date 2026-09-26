@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to AI Software Toolkit are documented here.
+All notable changes to SkrillX (formerly AI Software Toolkit) are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/). Starting with
 1.0, incompatible changes to the documented public runtime, configuration,
@@ -10,9 +10,15 @@ or evidence contracts require a major release and migration guidance.
 
 ### Usability, features, and performance (RoshFps fork)
 
-- `ai-toolkit` with no command now prints a five-step quick start instead of a
+- Rename the project to **SkrillX** and the command to `skrillx` (launcher
+  `bin/skrillx`, archive `skrillx.pyz`, starter workflow
+  `workflows/skrillx-setup.yml`). The `.guardrails/` runtime contract, the
+  `toolkit.toml` / `toolkit.lock.json` files, and the `.artifacts/ai-toolkit/`
+  storage paths are unchanged, so existing installations, backups, and
+  rollbacks keep working.
+- `skrillx` with no command now prints a five-step quick start instead of a
   usage error, and a mistyped command suggests the closest one
-  (`ai-toolkit doctr` -> "Did you mean `ai-toolkit doctor`?").
+  (`skrillx doctr` -> "Did you mean `skrillx doctor`?").
 - Human-readable output is colored on interactive terminals (PASS, FAIL,
   NO_RESULT, readiness, headings, and next steps). Color is off for pipes,
   CI logs, and JSON; `--no-color` and `NO_COLOR=1` turn it off and
@@ -22,16 +28,16 @@ or evidence contracts require a major release and migration guidance.
   `.artifacts/ai-toolkit/last-check.json`, and with `--html [PATH]` writes a
   self-contained HTML scorecard dashboard (light/dark, filter by status,
   search, phone-friendly, no network requests).
-- New `ai-toolkit report` re-renders the last check without rescanning, as
+- New `skrillx report` re-renders the last check without rescanning, as
   text, as HTML (`--html [PATH]`), or straight into the browser (`--open`).
 - `skills list` now shows each skill's description and marks the starter set
   on a terminal or with `--long` (piped output stays one name per line);
   new `skills search WORDS` (word-start matching, name matches first) and
   `skills show NAME` (description, files, install command, typo hints).
-- New `ai-toolkit completion bash|zsh|fish` prints tab-completion scripts
+- New `skrillx completion bash|zsh|fish` prints tab-completion scripts
   generated from the CLI's own parser.
-- New `bin/ai-toolkit` launcher and `bash tooling/install-cli.sh` put the
-  `ai-toolkit` command on `PATH` (a small wrapper in `~/.local/bin`, `--prefix`,
+- New `bin/skrillx` launcher and `bash tooling/install-cli.sh` put the
+  `skrillx` command on `PATH` (a small wrapper in `~/.local/bin`, `--prefix`,
   `--uninstall`); the launcher checks for Python 3.11+.
 - `tooling/test.sh` now runs each test module in its own process in parallel
   (`tooling/run_tests.py`; `-j N`, `-k NAME`, `-v`), scheduling the slowest
