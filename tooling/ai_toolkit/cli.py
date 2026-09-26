@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import difflib
+import functools
 import importlib.util
 import json
 import os
@@ -13,14 +15,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import VERSION, config, discovery, report, skills
+from . import VERSION, completion, config, dashboard, discovery, report, skills, style
 from .runtime import ROOT, ToolkitError, installed_runtime, relative, resolve_target, revision, run_python, script_path, sha256_file
 
 INSTALLER_MARKER = "# Guardrails v2 installer-owned workflow."
 
 
+@functools.lru_cache(maxsize=1)
 def _installer():
-    """Load tooling/install.py as a module to reuse its plan and ownership helpers."""
+    """Load tooling/install.py once per process to reuse its plan and ownership helpers."""
     path = ROOT / "tooling" / "install.py"
     spec = importlib.util.spec_from_file_location("ai_toolkit_installer", path)
     if not spec or not spec.loader:
@@ -35,7 +38,10 @@ def _print(text: str) -> None:
 
 
 def _emit(payload: dict[str, Any], as_json: bool, text: str) -> None:
-    _print(json.dumps(payload, indent=2) if as_json else text)
+    if as_json:
+        _print(json.dumps(payload, indent=2))
+    else:
+        _print(style.colorize(text) if style.enabled() else text)
 
 
 # --------------------------------------------------------------------------- managed files
@@ -485,8 +491,75 @@ def cmd_check(args: argparse.Namespace) -> int:
     except json.JSONDecodeError as error:
         raise ToolkitError(f"scan produced unreadable output: {error}") from error
     artifacts = card.get("artifacts", {}) if isinstance(card.get("artifacts"), dict) else {}
-    _emit(card, args.json, report.render_check(card, evidence_path=artifacts.get("evidence"), report_path=artifacts.get("report")))
+    save_last_check(target, card)
+    text = report.render_check(card, evidence_path=artifacts.get("evidence"), report_path=artifacts.get("report"))
+    if args.html is not None:
+        path = write_dashboard(target, card, args.html)
+        text += f"Dashboard: {path}\n"
+        card = {**card, "dashboard": str(path)}
+    _emit(card, args.json, text)
     return 0 if card.get("decision") == "allow" else 1
+
+
+LAST_CHECK = Path(".artifacts") / "ai-toolkit" / "last-check.json"
+DEFAULT_DASHBOARD = Path(".artifacts") / "ai-toolkit" / "scorecard.html"
+
+
+def save_last_check(target: Path, card: dict[str, Any]) -> None:
+    """Keep the latest result card so `report` can re-render it without rescanning."""
+    path = target / LAST_CHECK
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stamped = {**card, "checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        path.write_text(json.dumps(stamped, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        pass  # the report is a convenience; never fail a check over it
+
+
+def load_last_check(target: Path) -> dict[str, Any]:
+    path = target / LAST_CHECK
+    if not path.is_file():
+        raise ToolkitError("no saved check result; run `ai-toolkit check` first")
+    try:
+        card = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ToolkitError(f"cannot read {relative(path, target)}: {error}") from error
+    if not isinstance(card, dict):
+        raise ToolkitError(f"{relative(path, target)} is not a result card")
+    return card
+
+
+def write_dashboard(target: Path, card: dict[str, Any], output: str | Path) -> Path:
+    path = Path(output) if str(output) else target / DEFAULT_DASHBOARD
+    if not path.is_absolute():
+        path = target / path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    generated = card.get("checked_at") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path.write_text(dashboard.render_html(card, generated_at=str(generated)), encoding="utf-8")
+    return path
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    target = resolve_target(args.target)
+    card = load_last_check(target)
+    if args.html is None and not args.open:
+        artifacts = card.get("artifacts", {}) if isinstance(card.get("artifacts"), dict) else {}
+        text = report.render_check(card, evidence_path=artifacts.get("evidence"), report_path=artifacts.get("report"))
+        if card.get("checked_at"):
+            text = f"Last check: {card['checked_at']}\n" + text
+        _emit(card, args.json, text)
+        return 0
+    path = write_dashboard(target, card, args.html or "")
+    if args.open:
+        import webbrowser
+        webbrowser.open(path.resolve().as_uri())
+    _emit({"dashboard": str(path)}, args.json, f"Dashboard written to {path}" + ("" if args.open else "\nOpen it in a browser, or rerun with --open."))
+    return 0
+
+
+def cmd_completion(args: argparse.Namespace) -> int:
+    _print(completion.script(args.shell, build_parser()))
+    return 0
 
 
 def providers_document(target: Path) -> dict[str, Any]:
@@ -587,9 +660,30 @@ def record_skills_in_lock(target: Path, destination: Path, rows: list[dict[str, 
 
 def cmd_skills(args: argparse.Namespace) -> int:
     target = resolve_target(args.target)
-    if args.action == "list":
-        names = skills.canonical_skills()
-        _emit({"skills": names}, args.json, "\n".join(names))
+    if args.action in {"list", "search"}:
+        query = " ".join(args.query or [])
+        if args.action == "search" and not query:
+            raise ToolkitError("search needs a query, for example: ai-toolkit skills search security")
+        rows = skills.search_skills(query) if query else skills.skill_catalog()
+        # Like `ls`: a plain name per line when piped (script-friendly), descriptions on a
+        # terminal, with --long, or for search results.
+        detailed = args.long or args.action == "search" or sys.stdout.isatty()
+        text = render_skill_rows(rows, query) if detailed else "\n".join(row["name"] for row in rows)
+        _emit({"skills": [row["name"] for row in rows], "details": rows}, args.json, text)
+        return 0
+    if args.action == "show":
+        name = (args.query or [None])[0] or (args.skill or [None])[0]
+        if not name:
+            raise ToolkitError("show needs a skill name, for example: ai-toolkit skills show code-review")
+        if name not in skills.canonical_skills():
+            close = difflib.get_close_matches(name, skills.canonical_skills(), n=3)
+            raise ToolkitError(f"unknown skill: {name}" + (f" (did you mean {', '.join(close)}?)" if close else ""))
+        files = [path.relative_to(skills.source_dir() / name).as_posix() for path in skills.skill_files(name)]
+        info = {"name": name, "description": skills.skill_description(name), "starter": name in skills.STARTER_SKILLS, "files": files}
+        lines = [name + ("  (starter)" if info["starter"] else ""), "", wrap(info["description"], 78, ""), "",
+                 f"Files ({len(files)}):", *(f"  {item}" for item in files), "",
+                 f"Install: ai-toolkit skills install --skill {name} --client codex"]
+        _emit(info, args.json, "\n".join(lines))
         return 0
     requested = skills.resolve_skills(args.skill or ["starter"])
     clients = [item.strip() for item in args.client.split(",") if item.strip()]
@@ -611,6 +705,27 @@ def cmd_skills(args: argparse.Namespace) -> int:
         lines.extend(f"  {item['skill']}: {item['action']} ({len(item['files'])} files)" for item in row["skills"])
     _emit({"results": results}, args.json, "\n".join(lines))
     return 0
+
+
+def wrap(text: str, width: int, indent: str) -> str:
+    import textwrap
+    return textwrap.fill(text, width=width, initial_indent=indent, subsequent_indent=indent) if text else indent + "(no description)"
+
+
+def render_skill_rows(rows: list[dict[str, Any]], query: str) -> str:
+    if not rows:
+        return f"No skills match {query!r}. Try a broader word, or `ai-toolkit skills list`."
+    heading = f"{len(rows)} skill{'s' if len(rows) != 1 else ''}" + (f" matching {query!r}" if query else "") + " (* = starter set)"
+    lines = [heading, ""]
+    for row in rows:
+        lines.append(f"{'*' if row['starter'] else ' '} {row['name']}")
+        description = row["description"]
+        if len(description) > 150:
+            description = description[:147].rstrip() + "..."
+        lines.append(wrap(description, 88, "    "))
+    lines.append("")
+    lines.append("Details: ai-toolkit skills show NAME   Install: ai-toolkit skills install --skill NAME")
+    return "\n".join(lines)
 
 
 def cmd_qa(args: argparse.Namespace) -> int:
@@ -803,7 +918,8 @@ def _rollback(target: Path, configuration: dict[str, Any] | None, lock: dict[str
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-toolkit", description="AI Software Toolkit: install, diagnose, check, and update Guardrails, skills, and QA.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION} ({revision()})")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--no-color", action="store_true", help="plain output even on a terminal (also: NO_COLOR=1)")
+    subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     def common(sub: argparse.ArgumentParser) -> None:
         sub.add_argument("--target", type=Path, default=None, help="repository root (default: current directory)")
@@ -836,7 +952,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--operation", choices=("change", "release"), default="change")
     sub.add_argument("--base-ref", default="HEAD~1")
     sub.add_argument("--revision", default="")
+    sub.add_argument("--html", nargs="?", const="", default=None, metavar="PATH",
+                     help=f"also write an HTML dashboard (default path: {DEFAULT_DASHBOARD.as_posix()})")
     sub.set_defaults(func=cmd_check)
+
+    sub = subparsers.add_parser("report", help="show the last check again, or turn it into an HTML dashboard (no rescan)")
+    common(sub)
+    sub.add_argument("--html", nargs="?", const="", default=None, metavar="PATH",
+                     help=f"write an HTML dashboard (default path: {DEFAULT_DASHBOARD.as_posix()})")
+    sub.add_argument("--open", action="store_true", help="write the dashboard and open it in your browser")
+    sub.set_defaults(func=cmd_report)
 
     sub = subparsers.add_parser("providers", help="list providers, show prerequisites, or select one")
     common(sub)
@@ -845,9 +970,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--selection", metavar="CAPABILITY=PROVIDER")
     sub.set_defaults(func=cmd_providers)
 
-    sub = subparsers.add_parser("skills", help="list, install, or refresh canonical skills for Codex and Claude Code")
+    sub = subparsers.add_parser("skills", help="list, search, show, install, or refresh skills for Codex and Claude Code")
     common(sub)
-    sub.add_argument("action", nargs="?", choices=("list", "install", "refresh"), default="list")
+    sub.add_argument("action", nargs="?", choices=("list", "search", "show", "install", "refresh"), default="list")
+    sub.add_argument("query", nargs="*", help="search words (search) or a skill name (show)")
+    sub.add_argument("-l", "--long", action="store_true", help="list with descriptions even when output is piped")
     sub.add_argument("--skill", action="append", help="skill name, 'starter', or 'all' (repeatable)")
     sub.add_argument("--client", default="codex", help="comma-separated: codex,claude-code")
     sub.add_argument("--user", action="store_true", help="install into the client's user directory instead of the project")
@@ -868,17 +995,64 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--force", action="store_true", help="refresh even when the lock says the installation is current")
     sub.add_argument("--rollback", action="store_true", help="restore the previous managed files from the recorded backup")
     sub.set_defaults(func=cmd_update)
+
+    sub = subparsers.add_parser("completion", help="print a shell completion script (bash, zsh, or fish)")
+    sub.add_argument("shell", choices=completion.SHELLS)
+    sub.set_defaults(func=cmd_completion)
     return parser
+
+
+QUICK_START = """Quick start — AI Software Toolkit {version}
+
+  1. ai-toolkit discover            see what the toolkit detects in this repository (read-only)
+  2. ai-toolkit init --preview      preview the files it would add (nothing is written)
+  3. ai-toolkit init --yes          install Guardrails, starter skills, and QA bootstrap
+  4. ai-toolkit doctor              check setup: what is installed, configured, and verified
+  5. ai-toolkit check --html        run the scan and write an HTML scorecard dashboard
+
+Also useful:
+  ai-toolkit skills search TEXT     find an agent skill by keyword
+  ai-toolkit report --open          reopen the last scorecard in your browser
+  ai-toolkit completion bash        tab completion for your shell
+
+Run `ai-toolkit COMMAND --help` for options, or `ai-toolkit --help` for every command."""
+
+
+def suggest_command(argv: list[str], parser: argparse.ArgumentParser) -> str | None:
+    """If the first non-option word is a near-miss of a command, return the suggestion."""
+    commands = next(action.choices for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    word = next((item for item in argv if not item.startswith("-")), None)
+    if word is None or word in commands:
+        return None
+    close = difflib.get_close_matches(word, list(commands), n=1, cutoff=0.6)
+    return close[0] if close else None
+
+
+def _error(message: str) -> None:
+    text = f"ERROR {message}"
+    print(style.paint("ERROR", "red", "bold") + text[5:] if style.enabled(sys.stderr) else text, file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--no-color" in argv:
+        style.set_enabled(False)
+    suggestion = suggest_command(argv, parser)
+    if suggestion:
+        word = next(item for item in argv if not item.startswith("-"))
+        _error(f"unknown command '{word}'. Did you mean `ai-toolkit {suggestion}`?")
+        return 2
     args = parser.parse_args(argv)
+    if not getattr(args, "func", None):
+        text = QUICK_START.format(version=VERSION)
+        _print(style.colorize(text) if style.enabled() else text)
+        return 0
     try:
         return int(args.func(args))
     except ToolkitError as error:
-        print(f"ERROR {error}", file=sys.stderr)
+        _error(str(error))
         return 2
     except OSError as error:
-        print(f"ERROR {error}", file=sys.stderr)
+        _error(str(error))
         return 2
