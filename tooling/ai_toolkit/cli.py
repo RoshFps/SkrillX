@@ -1,4 +1,4 @@
-"""``ai-toolkit`` command-line entry point."""
+"""``skrillx`` command-line entry point."""
 
 from __future__ import annotations
 
@@ -310,7 +310,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         lines.append(f"  Guardrails runtime and workflows ({len(preview['guardrails'])} files){' — filling gaps in the existing installation' if already_installed else ''}:")
         lines.extend(f"    {relative(Path(path), target)}" for path in preview["guardrails"])
     elif "guardrails" in components:
-        lines.append("  Guardrails: already installed; nothing to add (use `ai-toolkit update` to refresh).")
+        lines.append("  Guardrails: already installed; nothing to add (use `skrillx update` to refresh).")
     for row in preview["skills"]:
         names = [item["skill"] for item in row["skills"] if item["action"] != "skip"]
         skipped = [item["skill"] for item in row["skills"] if item["action"] == "skip"]
@@ -384,7 +384,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         lines.append(f"  Variable {row['name']}: {row['action']} — {row['detail']}")
     lines.append(f"  Wrote {config.TOML_NAME} and {config.LOCK_NAME} ({len(managed)} managed files).")
     lines.append("")
-    lines.append("Next: commit these files, set any variables listed above, then run `ai-toolkit doctor` and `ai-toolkit check`.")
+    lines.append("Next: commit these files, set any variables listed above, then run `skrillx doctor` and `skrillx check`.")
     _emit({"preview": preview, "applied": applied}, args.json, "\n".join(lines))
     return 0
 
@@ -407,7 +407,7 @@ def ensure_gitignore(target: Path, found: dict[str, Any]) -> bool:
         return False
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
     separator = "" if not existing or existing.endswith("\n") else "\n"
-    path.write_text(existing + separator + "# AI Software Toolkit scan artifacts\n" + "".join(rule + "\n" for rule in additions), encoding="utf-8")
+    path.write_text(existing + separator + "# SkrillX scan artifacts\n" + "".join(rule + "\n" for rule in additions), encoding="utf-8")
     return True
 
 
@@ -419,7 +419,7 @@ def component_states(target: Path, configuration: dict[str, Any] | None, lock: d
         if runtime:
             states["guardrails"] = {"state": "installed", "message": f".guardrails/ runtime present (profiles: {', '.join(installed_profiles(target, configuration))})."}
         else:
-            states["guardrails"] = {"state": "missing", "message": ".guardrails/ runtime is not installed.", "next_step": "Run `ai-toolkit init`."}
+            states["guardrails"] = {"state": "missing", "message": ".guardrails/ runtime is not installed.", "next_step": "Run `skrillx init`."}
     if "skills" in components or "qa" in components:
         found, missing_clients = [], []
         for client in (configuration["agents"]["clients"] if configuration else config.CLIENTS):
@@ -435,7 +435,7 @@ def component_states(target: Path, configuration: dict[str, Any] | None, lock: d
             found.append(detail)
         state = "missing" if missing_clients else "installed"
         states["skills"] = {"state": state, "message": "; ".join(found),
-                            **({} if state == "installed" else {"next_step": "Run `ai-toolkit update` to restore recorded skills, or `ai-toolkit skills install --skill starter --client " + ",".join(missing_clients) + "`."})}
+                            **({} if state == "installed" else {"next_step": "Run `skrillx update` to restore recorded skills, or `skrillx skills install --skill starter --client " + ",".join(missing_clients) + "`."})}
     if "qa" in components:
         qa = discovery.detect_toolkit_state(target)["qa_configurations"]
         states["qa"] = {"state": "configured" if qa else "missing", "message": ("QA configuration: " + ", ".join(qa)) if qa else "No generated qa skill found.",
@@ -444,7 +444,7 @@ def component_states(target: Path, configuration: dict[str, Any] | None, lock: d
         "state": "configured" if configuration and lock else "installed" if configuration or lock else "missing",
         "message": f"{config.TOML_NAME} {'present' if configuration else 'absent'}; {config.LOCK_NAME} {'present' if lock else 'absent'}"
                    + (f"; revision {lock['toolkit'].get('revision')}" if lock else ""),
-        **({} if configuration and lock else {"next_step": "Run `ai-toolkit init` to record the installation."}),
+        **({} if configuration and lock else {"next_step": "Run `skrillx init` to record the installation."}),
     }
     return states
 
@@ -479,7 +479,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def cmd_check(args: argparse.Namespace) -> int:
     target = resolve_target(args.target)
     if not installed_runtime(target):
-        raise ToolkitError("the Guardrails runtime is not installed; run `ai-toolkit init` first")
+        raise ToolkitError("the Guardrails runtime is not installed; run `skrillx init` first")
     arguments = ["--target", str(target), "--operation", args.operation, "--base-ref", args.base_ref, "--json"]
     if args.revision:
         arguments.extend(["--revision", args.revision])
@@ -519,7 +519,7 @@ def save_last_check(target: Path, card: dict[str, Any]) -> None:
 def load_last_check(target: Path) -> dict[str, Any]:
     path = target / LAST_CHECK
     if not path.is_file():
-        raise ToolkitError("no saved check result; run `ai-toolkit check` first")
+        raise ToolkitError("no saved check result; run `skrillx check` first")
     try:
         card = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -622,7 +622,7 @@ def cmd_providers(args: argparse.Namespace) -> int:
             lines.append(f"  credentials: {', '.join(row['credential_names'])} (names only; values stay in GitHub secrets)")
         lines.append("  template: " + (row["template"] if row["template_available"] and row["template"] else "none shipped; the consumer owns the workflow"))
     lines.append("")
-    lines.append("Select a provider: ai-toolkit providers select CAPABILITY=PROVIDER (runs .guardrails/configure.py).")
+    lines.append("Select a provider: skrillx providers select CAPABILITY=PROVIDER (runs .guardrails/configure.py).")
     _print("\n".join(lines))
     return 0
 
@@ -663,7 +663,7 @@ def cmd_skills(args: argparse.Namespace) -> int:
     if args.action in {"list", "search"}:
         query = " ".join(args.query or [])
         if args.action == "search" and not query:
-            raise ToolkitError("search needs a query, for example: ai-toolkit skills search security")
+            raise ToolkitError("search needs a query, for example: skrillx skills search security")
         rows = skills.search_skills(query) if query else skills.skill_catalog()
         # Like `ls`: a plain name per line when piped (script-friendly), descriptions on a
         # terminal, with --long, or for search results.
@@ -674,7 +674,7 @@ def cmd_skills(args: argparse.Namespace) -> int:
     if args.action == "show":
         name = (args.query or [None])[0] or (args.skill or [None])[0]
         if not name:
-            raise ToolkitError("show needs a skill name, for example: ai-toolkit skills show code-review")
+            raise ToolkitError("show needs a skill name, for example: skrillx skills show code-review")
         if name not in skills.canonical_skills():
             close = difflib.get_close_matches(name, skills.canonical_skills(), n=3)
             raise ToolkitError(f"unknown skill: {name}" + (f" (did you mean {', '.join(close)}?)" if close else ""))
@@ -682,7 +682,7 @@ def cmd_skills(args: argparse.Namespace) -> int:
         info = {"name": name, "description": skills.skill_description(name), "starter": name in skills.STARTER_SKILLS, "files": files}
         lines = [name + ("  (starter)" if info["starter"] else ""), "", wrap(info["description"], 78, ""), "",
                  f"Files ({len(files)}):", *(f"  {item}" for item in files), "",
-                 f"Install: ai-toolkit skills install --skill {name} --client codex"]
+                 f"Install: skrillx skills install --skill {name} --client codex"]
         _emit(info, args.json, "\n".join(lines))
         return 0
     requested = skills.resolve_skills(args.skill or ["starter"])
@@ -714,7 +714,7 @@ def wrap(text: str, width: int, indent: str) -> str:
 
 def render_skill_rows(rows: list[dict[str, Any]], query: str) -> str:
     if not rows:
-        return f"No skills match {query!r}. Try a broader word, or `ai-toolkit skills list`."
+        return f"No skills match {query!r}. Try a broader word, or `skrillx skills list`."
     heading = f"{len(rows)} skill{'s' if len(rows) != 1 else ''}" + (f" matching {query!r}" if query else "") + " (* = starter set)"
     lines = [heading, ""]
     for row in rows:
@@ -724,7 +724,7 @@ def render_skill_rows(rows: list[dict[str, Any]], query: str) -> str:
             description = description[:147].rstrip() + "..."
         lines.append(wrap(description, 88, "    "))
     lines.append("")
-    lines.append("Details: ai-toolkit skills show NAME   Install: ai-toolkit skills install --skill NAME")
+    lines.append("Details: skrillx skills show NAME   Install: skrillx skills install --skill NAME")
     return "\n".join(lines)
 
 
@@ -738,7 +738,7 @@ def cmd_qa(args: argparse.Namespace) -> int:
         lines.append("  generated qa configuration: " + (", ".join(state["qa_configurations"]) or "none"))
         lines.append("  QA workflows: " + (", ".join(workflows) or "none"))
         if not state["qa_configurations"]:
-            lines.append("  Next: run `ai-toolkit qa bootstrap`, then ask your agent to use the qa-bootstrap skill.")
+            lines.append("  Next: run `skrillx qa bootstrap`, then ask your agent to use the qa-bootstrap skill.")
         else:
             lines.append("  Next: ask your agent to run the `qa` skill, or open a PR to run the QA workflow.")
         _emit(payload, args.json, "\n".join(lines))
@@ -795,7 +795,7 @@ def cmd_update(args: argparse.Namespace) -> int:
     if args.rollback:
         return _rollback(target, configuration, lock, args)
     if configuration is None:
-        raise ToolkitError(f"{config.TOML_NAME} is missing; run `ai-toolkit init` first")
+        raise ToolkitError(f"{config.TOML_NAME} is missing; run `skrillx init` first")
     current = revision()
     managed = managed_files(target, configuration, lock)
     classification = config.classify(target, lock, managed) if lock else bootstrap_classification(target, managed, configuration)
@@ -872,13 +872,13 @@ def cmd_update(args: argparse.Namespace) -> int:
     managed = managed_files(target, configuration, lock)
     config.write_lock(target, config.build_lock(current, components=components, managed=config.hash_managed(target, managed), previous=previous))
     payload.update({"applied": True, "conflicts": conflicts, "backup": relative(backup_root, target)})
-    lines.append(f"Applied. Backup: {relative(backup_root, target)} (use `ai-toolkit update --rollback` to restore).")
+    lines.append(f"Applied. Backup: {relative(backup_root, target)} (use `skrillx update --rollback` to restore).")
     if conflicts:
         lines.append("Preserved your modified files; the canonical versions are beside them for comparison:")
         lines.extend(f"  {row['path']}  <->  {row['canonical']}" for row in conflicts)
     if skipped_skills:
         payload["unmanaged_skills"] = skipped_skills
-        lines.append("Left alone (not recorded in the lock; run `ai-toolkit skills install` to adopt them):")
+        lines.append("Left alone (not recorded in the lock; run `skrillx skills install` to adopt them):")
         lines.extend(f"  {path}" for path in skipped_skills)
     lines.append(f"Updated {config.TOML_NAME} and {config.LOCK_NAME}.")
     _emit(payload, args.json, "\n".join(lines))
@@ -916,7 +916,7 @@ def _rollback(target: Path, configuration: dict[str, Any] | None, lock: dict[str
 # --------------------------------------------------------------------------- parser
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ai-toolkit", description="AI Software Toolkit: install, diagnose, check, and update Guardrails, skills, and QA.")
+    parser = argparse.ArgumentParser(prog="skrillx", description="SkrillX: install, diagnose, check, and update Guardrails, skills, and QA.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION} ({revision()})")
     parser.add_argument("--no-color", action="store_true", help="plain output even on a terminal (also: NO_COLOR=1)")
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
@@ -1002,20 +1002,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-QUICK_START = """Quick start — AI Software Toolkit {version}
+QUICK_START = """Quick start — SkrillX {version}
 
-  1. ai-toolkit discover            see what the toolkit detects in this repository (read-only)
-  2. ai-toolkit init --preview      preview the files it would add (nothing is written)
-  3. ai-toolkit init --yes          install Guardrails, starter skills, and QA bootstrap
-  4. ai-toolkit doctor              check setup: what is installed, configured, and verified
-  5. ai-toolkit check --html        run the scan and write an HTML scorecard dashboard
+  1. skrillx discover            see what the toolkit detects in this repository (read-only)
+  2. skrillx init --preview      preview the files it would add (nothing is written)
+  3. skrillx init --yes          install Guardrails, starter skills, and QA bootstrap
+  4. skrillx doctor              check setup: what is installed, configured, and verified
+  5. skrillx check --html        run the scan and write an HTML scorecard dashboard
 
 Also useful:
-  ai-toolkit skills search TEXT     find an agent skill by keyword
-  ai-toolkit report --open          reopen the last scorecard in your browser
-  ai-toolkit completion bash        tab completion for your shell
+  skrillx skills search TEXT     find an agent skill by keyword
+  skrillx report --open          reopen the last scorecard in your browser
+  skrillx completion bash        tab completion for your shell
 
-Run `ai-toolkit COMMAND --help` for options, or `ai-toolkit --help` for every command."""
+Run `skrillx COMMAND --help` for options, or `skrillx --help` for every command."""
 
 
 def suggest_command(argv: list[str], parser: argparse.ArgumentParser) -> str | None:
@@ -1041,7 +1041,7 @@ def main(argv: list[str] | None = None) -> int:
     suggestion = suggest_command(argv, parser)
     if suggestion:
         word = next(item for item in argv if not item.startswith("-"))
-        _error(f"unknown command '{word}'. Did you mean `ai-toolkit {suggestion}`?")
+        _error(f"unknown command '{word}'. Did you mean `skrillx {suggestion}`?")
         return 2
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
