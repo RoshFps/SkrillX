@@ -97,12 +97,21 @@ def next_action(row: dict[str, Any]) -> str:
     return "No action."
 
 
+def summary_line(groups: dict[str, list[dict[str, Any]]]) -> str:
+    """One scannable line: how many controls passed, failed, stayed unverified, or are inactive."""
+    return "Summary: " + " · ".join(
+        f"{len(groups[key])} {label}"
+        for key, label in (("passed", "passed"), ("failed", "failed"), ("unverified", "unverified"), ("not_activated", "not activated"))
+    )
+
+
 def render_check(card: dict[str, Any], *, evidence_path: str | None = None, report_path: str | None = None) -> str:
     groups = group_controls(card)
     subject = card.get("subject", {})
     lines = [
         f"Toolkit check: {card.get('status', 'UNKNOWN')} / {card.get('decision', 'unknown')} — policy {card.get('policy', '?')}, operation {card.get('operation', '?')}",
         f"Subject: {subject.get('type', '?')} {subject.get('revision', '?')}",
+        summary_line(groups),
         "",
         f"What ran and passed ({len(groups['passed'])}):",
     ]
