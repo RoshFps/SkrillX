@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the distributable ``ai-toolkit.pyz`` archive and its SHA-256 checksum.
+"""Build the distributable ``skrillx.pyz`` archive and its SHA-256 checksum.
 
 The archive carries the toolkit source subset that installation needs. When
 run, it extracts that payload to a per-checksum cache directory and executes
@@ -22,11 +22,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE_NAME = "ai-toolkit.pyz"
+ARCHIVE_NAME = "skrillx.pyz"
 PAYLOAD_DIRECTORIES = ("tooling", "guardrails", "policies", "workflows", "security/semgrep", "skills", "pr-review")
 EXCLUDED_PARTS = {"__pycache__", ".ruff_cache", "tests", "coverage-support", ".DS_Store"}
 
-LAUNCHER = '''"""ai-toolkit archive launcher: extract the payload once per checksum, then run the CLI."""
+LAUNCHER = '''"""skrillx archive launcher: extract the payload once per checksum, then run the CLI."""
 
 import hashlib
 import os
@@ -64,7 +64,7 @@ def extracted_root(archive, digest):
     if marker.is_file():
         return root
     root.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix="ai-toolkit-", dir=str(root.parent)))
+    staging = Path(tempfile.mkdtemp(prefix="skrillx-", dir=str(root.parent)))
     try:
         with zipfile.ZipFile(archive) as bundle:
             for member in bundle.infolist():
@@ -94,7 +94,7 @@ def extracted_root(archive, digest):
 def main():
     archive = archive_path()
     if not zipfile.is_zipfile(archive):
-        raise SystemExit("ERROR run this launcher as python3 ai-toolkit.pyz <command>")
+        raise SystemExit("ERROR run this launcher as python3 skrillx.pyz <command>")
     root = extracted_root(archive, checksum(archive))
     command = [sys.executable, str(root / "tooling" / "ai_toolkit"), *sys.argv[1:]]
     return subprocess.call(command)
@@ -147,7 +147,7 @@ def sha256_file(path: Path) -> str:
 
 def build(output: Path, *, root: Path = ROOT, build_revision: str | None = None) -> tuple[Path, Path]:
     build_revision = build_revision or revision(root)
-    with tempfile.TemporaryDirectory(prefix="ai-toolkit-build-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="skrillx-build-") as temporary:
         staging = Path(temporary) / "app"
         payload = staging / "payload"
         for path in payload_files(root):
