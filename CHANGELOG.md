@@ -31,7 +31,7 @@ or evidence contracts require a major release and migration guidance.
 - New `ai-toolkit completion bash|zsh|fish` prints tab-completion scripts
   generated from the CLI's own parser.
 - New `bin/ai-toolkit` launcher and `bash tooling/install-cli.sh` put the
-  `ai-toolkit` command on `PATH` (symlink into `~/.local/bin`, `--prefix`,
+  `ai-toolkit` command on `PATH` (a small wrapper in `~/.local/bin`, `--prefix`,
   `--uninstall`); the launcher checks for Python 3.11+.
 - `tooling/test.sh` now runs each test module in its own process in parallel
   (`tooling/run_tests.py`; `-j N`, `-k NAME`, `-v`), scheduling the slowest
