@@ -2,7 +2,7 @@
 
 ## Scope And Ownership
 
-AI Software Toolkit publishes shared engineering policy, agent skills,
+SkrillX publishes shared engineering policy, agent skills,
 QA and CI workflows, and the Guardrails runtime. Its security boundary is
 the integrity of those materials and the decisions made from their evidence.
 It is not an application service and has no application database or migration
