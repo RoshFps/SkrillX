@@ -49,7 +49,7 @@ or evidence contracts require a major release and migration guidance.
   `actions/download-artifact` v8.0.1, `github/codeql-action` v4.38.2,
   `actions/dependency-review-action` v5.0.0, and
   `SonarSource/sonarqube-quality-gate-action` v1.2.1.
-- Maintained by Roshan Immanuel at `RoshFps/ai-software-toolkit`; repository
+- Maintained by Roshan Immanuel at `RoshFps/SkrillX`; repository
   links, badges, and the setup workflow's release download now point there.
 - CLI version 2.2.0.
 
