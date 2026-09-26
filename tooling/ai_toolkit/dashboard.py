@@ -195,7 +195,7 @@ footer {{ margin-top:32px; color:var(--muted); font-size:12px; }}
   </div>
   <section class="controls" id="controls">{cards}</section>
   {artifacts}
-  <footer>Generated {generated} by ai-toolkit {version}. A missing result is never counted as a pass.</footer>
+  <footer>Generated {generated} by skrillx {version}. A missing result is never counted as a pass.</footer>
 </main>
 <script>
 (function () {{

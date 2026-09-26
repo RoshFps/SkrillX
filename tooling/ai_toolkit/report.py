@@ -200,12 +200,12 @@ def verified_rows(target: Path, doctor_report: dict[str, Any]) -> list[dict[str,
         if state == "verified":
             action = f"Latest evidence for HEAD shows {observed}; keep it current by rerunning check after changes."
         elif state == "configured":
-            action = "Run `ai-toolkit check` (or open a PR) to produce revision-bound evidence."
+            action = "Run `skrillx check` (or open a PR) to produce revision-bound evidence."
         elif state == "installed":
             gap = command or workflow or {}
             action = gap.get("next_step", "Configure the capability's command, credential, or workflow.")
         else:
-            action = "Run `ai-toolkit init` to install the Guardrails runtime."
+            action = "Run `skrillx init` to install the Guardrails runtime."
         rows.append({"capability": capability, "state": state, "observed": observed, "next_step": action})
     return rows
 
@@ -224,7 +224,7 @@ def render_doctor(target: Path, doctor_report: dict[str, Any], rows: list[dict[s
     elif binding["evidence_revision"]:
         lines.append(f"Evidence: latest local evidence is for {str(binding['evidence_revision'])[:12]}, not HEAD {str(binding['head'] or '?')[:12]}; capabilities cannot be verified from it.")
     else:
-        lines.append("Evidence: no local evidence found; run `ai-toolkit check` to produce it.")
+        lines.append("Evidence: no local evidence found; run `skrillx check` to produce it.")
     lines.append("")
     lines.append("Capabilities:")
     for row in rows:
