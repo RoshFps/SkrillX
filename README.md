@@ -66,7 +66,7 @@ See [the toolkit vision](docs/vision.md) for the Plan → Build → Validate →
 Release → Improve direction and the distinction between available components,
 optional integrations, and future work.
 
-## Try the Guardrails demo
+## Start here
 
 Try the embedded Python demo in an isolated directory with Git, Python 3.11+
 and a POSIX shell. “Guardrails v2” names the runtime and evidence contract,
