@@ -3,8 +3,8 @@
 **Move fast. Prove it works.** Shared skills, QA workflows, and guardrails for
 planning, building, testing, securing, and releasing software with AI.
 
-[![License](https://img.shields.io/github/license/RoshFps/ai-software-toolkit?label=license)](LICENSE)
-[![Scorecard Workflow](https://github.com/RoshFps/ai-software-toolkit/actions/workflows/guardrails-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/ai-software-toolkit/actions/workflows/guardrails-scorecard.yml)
+[![License](https://img.shields.io/github/license/RoshFps/SkrillX?label=license)](LICENSE)
+[![Scorecard Workflow](https://github.com/RoshFps/SkrillX/actions/workflows/guardrails-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/SkrillX/actions/workflows/guardrails-scorecard.yml)
 
 SkrillX supports development, QA, security, and release teams.
 Skills guide repeatable work, functional QA exercises application behavior,
@@ -18,10 +18,10 @@ Maintained by [Roshan Immanuel](https://github.com/RoshFps). See
 ## Get going in one minute
 
 ```sh
-git clone https://github.com/RoshFps/ai-software-toolkit.git
-bash ai-software-toolkit/tooling/install-cli.sh   # puts `skrillx` on your PATH
+git clone https://github.com/RoshFps/SkrillX.git
+bash SkrillX/tooling/install-cli.sh   # puts `skrillx` on your PATH
 cd /path/to/your/repo
-skrillx                                           # prints the quick start
+skrillx                               # prints the quick start
 ```
 
 | Step | Command | What happens |
@@ -75,8 +75,8 @@ service is required to get a scorecard.
 
 ```sh
 demo_workspace="$(mktemp -d)"
-git clone https://github.com/RoshFps/ai-software-toolkit.git "$demo_workspace/ai-software-toolkit"
-standards_root="$demo_workspace/ai-software-toolkit"
+git clone https://github.com/RoshFps/SkrillX.git "$demo_workspace/SkrillX"
+standards_root="$demo_workspace/SkrillX"
 cp -R "$standards_root/examples/python-demo" "$demo_workspace/python-demo"
 cd "$demo_workspace/python-demo"
 
