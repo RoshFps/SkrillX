@@ -19,12 +19,12 @@ The quickest way is to put the checkout's launcher on your `PATH`:
 
 ```bash
 git clone https://github.com/RoshFps/ai-software-toolkit.git
-bash ai-software-toolkit/tooling/install-cli.sh       # links ~/.local/bin/ai-toolkit
+bash ai-software-toolkit/tooling/install-cli.sh       # installs ~/.local/bin/ai-toolkit
 ai-toolkit --version
 ```
 
-`bash tooling/install-cli.sh --prefix DIR` links somewhere else and `--uninstall` removes
-the link. The link points at the checkout, so `git pull` updates the command.
+`bash tooling/install-cli.sh --prefix DIR` installs somewhere else and `--uninstall`
+removes it. The wrapper runs the checkout, so `git pull` updates the command.
 Set `AI_TOOLKIT_PYTHON` to choose the interpreter (Python 3.11+).
 
 You can also run it directly from a source checkout:
