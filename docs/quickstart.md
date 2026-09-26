@@ -9,22 +9,22 @@ Install Core, configure repository commands, run locally, and then verify the
 same capability providers on a pull request.
 
 For a copyable, isolated first run, start with the
-[release-pinned Python demo](../README.md#start-here). It clones v1.0.0,
+[Python demo](../README.md#start-here). It clones the toolkit,
 refreshes the embedded installation, configures real build/test commands,
 commits the demo, and scans it. Git, Python 3.11+, and a POSIX shell are the
 prerequisites. Docker and GitHub credentials are optional; missing providers
-produce no result, not a pass. “v2” is the runtime and evidence contract;
-v1.0.0 is the repository release version.
+produce no result, not a pass. “v2” is the runtime and evidence contract, not
+the repository release version.
 
 The numbered steps below adapt that flow to **your own repository**. Use its
 real commands and ground-truth documents, not the demo's paths.
 
 ## 1. Preview and install Core
 
-Clone the released source, then run the installer from that checkout:
+Clone the source, then run the installer from that checkout:
 
 ```sh
-git clone --branch v1.0.0 https://github.com/ravisingh11/ai-software-toolkit.git
+git clone https://github.com/RoshFps/ai-software-toolkit.git
 cd ai-software-toolkit
 python3 tooling/install.py --target /path/to/repo --dry-run
 python3 tooling/install.py --target /path/to/repo

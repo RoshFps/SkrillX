@@ -8,6 +8,47 @@ or evidence contracts require a major release and migration guidance.
 
 ## [Unreleased]
 
+### Usability, features, and performance (RoshFps fork)
+
+- `ai-toolkit` with no command now prints a five-step quick start instead of a
+  usage error, and a mistyped command suggests the closest one
+  (`ai-toolkit doctr` -> "Did you mean `ai-toolkit doctor`?").
+- Human-readable output is colored on interactive terminals (PASS, FAIL,
+  NO_RESULT, readiness, headings, and next steps). Color is off for pipes,
+  CI logs, and JSON; `--no-color` and `NO_COLOR=1` turn it off and
+  `FORCE_COLOR=1` turns it on. Stripping color yields the plain report exactly.
+- `check` prints a one-line summary (`N passed · N failed · N unverified · N
+  not activated`), saves the result card to
+  `.artifacts/ai-toolkit/last-check.json`, and with `--html [PATH]` writes a
+  self-contained HTML scorecard dashboard (light/dark, filter by status,
+  search, phone-friendly, no network requests).
+- New `ai-toolkit report` re-renders the last check without rescanning, as
+  text, as HTML (`--html [PATH]`), or straight into the browser (`--open`).
+- `skills list` now shows each skill's description and marks the starter set
+  on a terminal or with `--long` (piped output stays one name per line);
+  new `skills search WORDS` (word-start matching, name matches first) and
+  `skills show NAME` (description, files, install command, typo hints).
+- New `ai-toolkit completion bash|zsh|fish` prints tab-completion scripts
+  generated from the CLI's own parser.
+- New `bin/ai-toolkit` launcher and `bash tooling/install-cli.sh` put the
+  `ai-toolkit` command on `PATH` (a small wrapper in `~/.local/bin`, `--prefix`,
+  `--uninstall`); the launcher checks for Python 3.11+.
+- `tooling/test.sh` now runs each test module in its own process in parallel
+  (`tooling/run_tests.py`; `-j N`, `-k NAME`, `-v`), scheduling the slowest
+  modules first and reporting the slowest three. The installer module is
+  loaded once per CLI process instead of on every call.
+- Update pinned GitHub Actions in the workflow templates (`workflows/`) to
+  their latest releases:
+  `actions/checkout` v7.0.1, `actions/upload-artifact` v7.0.1,
+  `actions/download-artifact` v8.0.1, `github/codeql-action` v4.38.2,
+  `actions/dependency-review-action` v5.0.0, and
+  `SonarSource/sonarqube-quality-gate-action` v1.2.1.
+- Maintained by Roshan Immanuel at `RoshFps/ai-software-toolkit`; repository
+  links, badges, and the setup workflow's release download now point there.
+- CLI version 2.2.0.
+
+### Earlier unreleased changes
+
 - Add the shared `ai-toolkit` CLI (`tooling/ai_toolkit`) with `discover`,
   `init`, `doctor`, `check`, `providers`, `skills`, `qa`, and `update`. The CLI
   dispatches to the existing installer, diagnostics, scanner, configuration,
@@ -162,8 +203,3 @@ Initial public release.
 - Added reusable GitHub Actions workflows and default-branch ruleset templates.
 - Added engineering, QA, security, and repository-standards AI review guidance.
 - Added reusable engineering skills and an embedded Python consumer example.
-
-[0.1.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v0.1.0
-[0.2.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v0.2.0
-[1.0.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v1.0.0
-[Unreleased]: https://github.com/ravisingh11/ai-software-toolkit/compare/v1.0.0...HEAD

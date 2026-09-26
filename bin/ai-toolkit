@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# ai-toolkit launcher: run the CLI from this checkout, even through a symlink
+# (for example ~/.local/bin/ai-toolkit created by tooling/install-cli.sh).
+set -euo pipefail
+
+source_path="${BASH_SOURCE[0]}"
+while [[ -L "${source_path}" ]]; do
+  link_dir="$(cd "$(dirname "${source_path}")" && pwd -P)"
+  source_path="$(readlink "${source_path}")"
+  [[ "${source_path}" == /* ]] || source_path="${link_dir}/${source_path}"
+done
+toolkit_root="$(cd "$(dirname "${source_path}")/.." && pwd -P)"
+
+python_bin="${AI_TOOLKIT_PYTHON:-python3}"
+if ! "${python_bin}" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
+  echo "ERROR ai-toolkit needs Python 3.11 or newer (set AI_TOOLKIT_PYTHON to choose an interpreter)." >&2
+  exit 2
+fi
+exec "${python_bin}" "${toolkit_root}/tooling/ai_toolkit" "$@"

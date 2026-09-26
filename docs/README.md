@@ -11,7 +11,6 @@ Guardrails. Start with the task you need to perform.
 | Install reusable agent skills | [Skill catalog](../skills/README.md) |
 | Set up functional QA | [QA bootstrap](../skills/qa-bootstrap/SKILL.md) |
 | Develop and check this toolkit | [Self-check](self-check.md), [contributing](../CONTRIBUTING.md) |
-| Update an existing clone after the rename | [Repository rename](repository-rename.md) |
 | Review supported releases | [Changelog](../CHANGELOG.md), [v1.0.0](releases/v1.0.0.md) |
 
 ## Guides by area
