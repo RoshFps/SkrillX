@@ -382,6 +382,11 @@ or evidence contracts require a major release and migration guidance.
   Existing `snyk-code`, `snyk-open-source`, and `fossa` check identities are
   unchanged.
 
+- `tooling/lint.sh` now runs Pylint 4.0.10 on tracked Python files with
+  error and fatal checks only (`.pylintrc`), alongside Ruff and yamllint.
+  Semgrep fixtures that intentionally shadow third-party modules are
+  excluded.
+
 - Add the shared `ai-toolkit` CLI (`tooling/ai_toolkit`) with `discover`,
   `init`, `doctor`, `check`, `providers`, `skills`, `qa`, and `update`. The CLI
   dispatches to the existing installer, diagnostics, scanner, configuration,

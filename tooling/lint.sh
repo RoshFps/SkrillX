@@ -8,6 +8,10 @@ command -v ruff >/dev/null 2>&1 || {
   echo "ruff is required; install tooling/requirements-lint.txt" >&2
   exit 2
 }
+command -v pylint >/dev/null 2>&1 || {
+  echo "pylint is required; install tooling/requirements-lint.txt" >&2
+  exit 2
+}
 command -v yamllint >/dev/null 2>&1 || {
   echo "yamllint is required; install tooling/requirements-lint.txt" >&2
   exit 2
@@ -18,4 +22,11 @@ git diff --check "${empty_tree}" HEAD
 git diff --cached --check
 git diff --check
 ruff check .
+python_files=()
+while IFS= read -r -d '' file; do
+  python_files+=("${file}")
+done < <(git ls-files -z -- '*.py')
+if ((${#python_files[@]})); then
+  pylint "${python_files[@]}"
+fi
 yamllint --strict .

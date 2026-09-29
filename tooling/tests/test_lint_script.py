@@ -20,10 +20,14 @@ class LintScriptTests(unittest.TestCase):
 
         tool_directory = self.repository / "fake-bin"
         tool_directory.mkdir()
-        for name in ("ruff", "yamllint"):
+        for name in ("pylint", "ruff", "yamllint"):
             executable = tool_directory / name
             executable.write_text("#!/usr/bin/env sh\nexit 0\n")
             executable.chmod(0o755)
+        self.pylint_arguments = self.repository / "pylint-arguments.txt"
+        (tool_directory / "pylint").write_text(
+            f'#!/usr/bin/env sh\nprintf "%s\\n" "$@" > "{self.pylint_arguments.as_posix()}"\n'
+        )
 
         self.environment = os.environ.copy()
         self.environment["PATH"] = f"{tool_directory}:{self.environment['PATH']}"
@@ -72,6 +76,23 @@ class LintScriptTests(unittest.TestCase):
 
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("trailing whitespace", completed.stdout + completed.stderr)
+
+    def test_runs_pylint_on_tracked_python_files(self) -> None:
+        (self.repository / "tracked.py").write_text("VALUE = 1\n")
+        (self.repository / "untracked.py").write_text("VALUE = 2\n")
+        self.git("add", "tracked.py")
+        self.git("commit", "-m", "test: add python module")
+
+        completed = self.run_lint()
+
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(self.pylint_arguments.read_text().splitlines(), ["tracked.py"])
+
+    def test_skips_pylint_without_tracked_python_files(self) -> None:
+        completed = self.run_lint()
+
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertFalse(self.pylint_arguments.exists())
 
 
 if __name__ == "__main__":

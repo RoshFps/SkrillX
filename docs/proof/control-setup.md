@@ -82,7 +82,8 @@ contexts are required by the live default-branch ruleset. Other selected
 capabilities remain advisory unless this repository's policy says otherwise.
 
 `tooling/lint.sh` checks whitespace errors in committed, staged, and unstaged
-content, Python syntax and name errors through Ruff, and YAML structure and
+content, Python syntax and name errors through Ruff, Python error-level
+checks through Pylint (configured in `.pylintrc`), and YAML structure and
 duplicate keys through yamllint.
 The pinned configuration intentionally does not make historical Python or YAML
 style debt a prerequisite for unrelated changes. Tighten the checked rules in

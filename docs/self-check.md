@@ -19,9 +19,9 @@ working directory.
 
 Use the repository's supported Python environment with the dependencies in
 [`tooling/requirements-ci.txt`](../tooling/requirements-ci.txt) available on
-`PATH`, including `coverage`, `diff-cover`, `ruff`, and `yamllint`. Git and Bash
-are required. The launcher does not install tools or run an inherited setup
-command. Semgrep and Gitleaks use the toolkit's pinned Docker images when Docker
+`PATH`, including `coverage`, `diff-cover`, `pylint`, `ruff`, and `yamllint`.
+Git and Bash are required. The launcher does not install tools or run an
+inherited setup command. Semgrep and Gitleaks use the toolkit's pinned Docker images when Docker
 is available, or supported host versions (Semgrep 1.175.0 and Gitleaks 8.30.1).
 Unavailable tools remain missing evidence. Keep any Python virtual environment
 outside the checkout so repository-wide validators inspect project files only.
