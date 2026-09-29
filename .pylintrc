@@ -1,5 +1,7 @@
 [MAIN]
 py-version = 3.9
+# Tests import tooling.* from the repository root, as tooling/run_tests.py runs them.
+init-hook = import sys; sys.path.insert(0, ".")
 # Semgrep fixtures deliberately shadow third-party modules such as requests.
 ignore-paths =
     ^[.]guardrails/semgrep-tests/fixtures/.*$,
