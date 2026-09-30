@@ -122,6 +122,7 @@ def _request_bytes(url: str, token: str) -> bytes:
         "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": "2022-11-28",
     })
+    location = None
     try:
         build_opener(NoRedirectHandler()).open(request, timeout=20)
     except HTTPError as error:

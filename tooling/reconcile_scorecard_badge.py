@@ -405,6 +405,7 @@ def download_artifact(
         },
     )
     redirect_opener = opener or build_opener(NoRedirectHandler())
+    location = None
     try:
         redirect_opener.open(request, timeout=20)
     except HTTPError as error:

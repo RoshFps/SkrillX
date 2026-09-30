@@ -20,9 +20,8 @@ def load(relative_path: str) -> dict:
 
 class GuardrailsContractValidationTests(unittest.TestCase):
     def validator(self, name: str):
-        validator = getattr(MODULE, name, None)
-        self.assertIsNotNone(validator, f"missing contract validator: {name}")
-        return validator
+        self.assertTrue(hasattr(MODULE, name), f"missing contract validator: {name}")
+        return getattr(MODULE, name)
 
     def catalog(self) -> dict[str, dict]:
         return {

@@ -56,9 +56,8 @@ def load(relative_path: str) -> dict:
 
 class ControlCatalogPolicyTests(unittest.TestCase):
     def validator(self, name: str):
-        validator = getattr(MODULE, name, None)
-        self.assertIsNotNone(validator, f"missing contract validator: {name}")
-        return validator
+        self.assertTrue(hasattr(MODULE, name), f"missing contract validator: {name}")
+        return getattr(MODULE, name)
 
     def test_catalog_contains_exact_v2_capabilities(self) -> None:
         catalog = load("policies/control-catalog.yaml")
