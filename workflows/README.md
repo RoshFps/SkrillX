@@ -198,3 +198,7 @@ tag you supply, verifies it against the SHA-256 you supply, runs
 commits the installation to a `skrillx/setup-<tag>` branch and opens a
 pull request with `gh`. Discovered repository commands appear in the preview
 as `gh variable set` lines; the workflow never writes them into the tree.
+
+The checkout does not persist credentials. The workflow token is exposed only
+to the `git push` and `gh pr create` commands, never to the downloaded archive
+or to the preview step.
