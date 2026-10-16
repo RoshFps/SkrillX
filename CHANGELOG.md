@@ -10,6 +10,11 @@ or evidence contracts require a major release and migration guidance.
 
 ### Usability, features, and performance (RoshFps fork)
 
+- Security and performance audit: `workflows/skrillx-setup.yml` no longer
+  persists the write token in the checkout or exposes it to the downloaded
+  archive (it is passed only to `git push` and `gh pr create`); glob patterns in
+  the change-scope and documentation validators are compiled once instead of
+  per file; `tooling/test.sh` is now executable as documented.
 - Rename the project to **SkrillX** and the command to `skrillx` (launcher
   `bin/skrillx`, archive `skrillx.pyz`, starter workflow
   `workflows/skrillx-setup.yml`). The `.guardrails/` runtime contract, the

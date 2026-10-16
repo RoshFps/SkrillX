@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import subprocess
@@ -71,6 +72,7 @@ def validate_policy(policy: dict[str, Any]) -> None:
                 validate_pattern(pattern, f"{label}.{key}")
 
 
+@functools.lru_cache(maxsize=None)
 def glob_regex(pattern: str) -> re.Pattern[str]:
     index = 0
     output = ""

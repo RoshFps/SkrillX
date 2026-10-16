@@ -99,7 +99,8 @@ def recorded_skills(target: Path, lock: dict[str, Any] | None, root: Path) -> li
     """Skill names the lock records under ``root``, whether or not the directory still exists."""
     prefix = relative(root, target) + "/"
     names = {path[len(prefix):].split("/", 1)[0] for path in (lock or {}).get("managed", {}) if path.startswith(prefix)}
-    return sorted(name for name in names if name in set(skills.canonical_skills()) | {skills.SHARED_BUNDLE})
+    known = set(skills.canonical_skills()) | {skills.SHARED_BUNDLE}
+    return sorted(name for name in names if name in known)
 
 
 def skill_inventory(target: Path, root: Path, names: set[str]) -> list[str]:
