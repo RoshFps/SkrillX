@@ -48,6 +48,9 @@ repository producers, overriding inherited command settings:
 | Format and lint | `tooling/lint.sh` |
 | Migration validation | `python3 tooling/validators/validate_no_migrations.py` |
 
+The producers are executable scripts: run them directly (for example
+`tooling/test.sh`), not through `bash`, so the committed file modes stay honest.
+
 `tooling/test.sh` disables git's automatic background maintenance and gc for
 the test processes, so a detached git job cannot race the removal of a test's
 temporary repository. The no-migrations validator is deliberate: this toolkit
