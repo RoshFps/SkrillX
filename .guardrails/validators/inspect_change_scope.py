@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import subprocess
@@ -43,6 +44,7 @@ def load_policy(path: Path) -> dict[str, Any]:
     return value
 
 
+@functools.lru_cache(maxsize=None)
 def glob_regex(pattern: str) -> re.Pattern[str]:
     index = 0
     output = ""

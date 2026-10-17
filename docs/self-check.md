@@ -47,6 +47,9 @@ settings:
 | Format and lint | `tooling/lint.sh` |
 | Migration validation | `python3 tooling/validators/validate_no_migrations.py` |
 
+The producers are executable scripts: run them directly (for example
+`tooling/test.sh`), not through `bash`, so the committed file modes stay honest.
+
 The no-migrations validator is deliberate: this toolkit has no application
 database. The scanner also invokes available repository, documentation,
 ground-truth, and change-scope validators. The launcher does not change policies,
