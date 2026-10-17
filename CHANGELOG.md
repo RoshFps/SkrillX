@@ -19,6 +19,9 @@ or evidence contracts require a major release and migration guidance.
   (`tooling/install-cli.sh`), and a parallel test runner (`tooling/run_tests.py`).
 - Rename the project to SkrillX and the command to `skrillx`
   (`bin/skrillx`, `workflows/skrillx-setup.yml`, `SKRILLX_PYTHON`).
+- Semgrep scans pass `--disable-version-check` (and `--metrics off` for local
+  scans), so the update check no longer stalls each scan for over a minute
+  inside the `--network none` container (carries over RoshFps/SkrillX#11).
 - Add Windows install steps (Git Bash) to the README and `docs/install.md`.
 - Run Pylint error-level checks in `tooling/lint.sh` (`.pylintrc`).
 - Scope the setup workflow's write token to `git push` and `gh pr create`, compile

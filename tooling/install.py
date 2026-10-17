@@ -343,7 +343,7 @@ def precommit_config() -> str:
       - id: proof-semgrep-ce
         name: Proof Semgrep CE
         language: docker_image
-        entry: {SEMGREP_IMAGE} semgrep scan --error --config .proof/semgrep-rules.yml --exclude .proof/semgrep-tests/fixtures --exclude security/semgrep/tests/fixtures .
+        entry: {SEMGREP_IMAGE} semgrep scan --error --metrics off --disable-version-check --config .proof/semgrep-rules.yml --exclude .proof/semgrep-tests/fixtures --exclude security/semgrep/tests/fixtures .
         pass_filenames: false
       - id: proof-gitleaks
         name: Proof Gitleaks

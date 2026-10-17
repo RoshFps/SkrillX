@@ -262,6 +262,7 @@ class ToolProducerTests(unittest.TestCase):
             self.assertIn(MODULE.SEMGREP_IMAGE, command)
             self.assertIn("scan", command)
             self.assertIn("--error", command)
+            self.assertIn("--disable-version-check", command)
             self.assertIn(".proof/semgrep-rules.yml", command)
             self.assertIn(".proof/semgrep-tests/fixtures", command)
             self.assertIn("security/semgrep/tests/fixtures", command)

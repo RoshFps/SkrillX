@@ -15,7 +15,7 @@ class SemgrepWorkflowTests(unittest.TestCase):
 
         self.assertNotIn("semgrep --test", workflow)
         self.assertIn(
-            "semgrep scan --metrics off --config .proof/semgrep-rules.yml --json",
+            "semgrep scan --metrics off --disable-version-check --config .proof/semgrep-rules.yml --json",
             workflow,
         )
         self.assertIn("semgrep-unsafe.json", workflow)

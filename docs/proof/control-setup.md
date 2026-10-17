@@ -159,7 +159,10 @@ marker text. See the [producer contract](producer-contract.md#optional-pr-metada
 
 ### Semgrep CE
 
-Core runs `semgrep scan --error` with `.proof/semgrep-rules.yml`. The
+Core runs `semgrep scan --error` with `.proof/semgrep-rules.yml`. Every scan
+passes `--metrics off --disable-version-check`, so Semgrep neither sends
+telemetry nor waits on its update check, which cannot reach the network from the
+container and otherwise stalls each run for well over a minute. The
 workflow first runs Semgrep's rule tests against the installed positive and
 negative fixtures. It does not use cloud-managed rules or require an AppSec
 Platform token.
