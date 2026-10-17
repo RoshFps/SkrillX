@@ -10,6 +10,10 @@ or evidence contracts require a major release and migration guidance.
 
 ### Usability, features, and performance (RoshFps fork)
 
+- Semgrep scans pass `--disable-version-check` (and `--metrics off` for local
+  scans). Inside the `--network none` container Semgrep's update check could
+  not connect and stalled each of the workflow's three scans for over a
+  minute; measured locally, a fixture scan drops from 98.8s to 1.6s.
 - Security and performance audit: `workflows/skrillx-setup.yml` no longer
   persists the write token in the checkout or exposes it to the downloaded
   archive (it is passed only to `git push` and `gh pr create`); glob patterns in

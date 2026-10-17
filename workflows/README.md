@@ -54,7 +54,9 @@ diffs without measured lines. A successful docs-only run is not a claim of
 100% coverage. Changing a workflow updates future runs, not historical titles.
 
 Semgrep CE runs its repository-owned rule tests, then `semgrep scan --error`
-from the exact pinned container with networking disabled. Gitleaks runs the MIT
+from the exact pinned container with networking disabled. Every Semgrep scan
+passes `--metrics off --disable-version-check`; without the second flag the
+update check cannot connect and stalls each scan for over a minute. Gitleaks runs the MIT
 CLI from its exact pinned container against complete Git history. Core does not
 use a platform token for Semgrep or the separately licensed Gitleaks Action.
 

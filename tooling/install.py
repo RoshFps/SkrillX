@@ -278,7 +278,7 @@ def precommit_config() -> str:
       - id: guardrails-semgrep-ce
         name: Guardrails Semgrep CE
         language: docker_image
-        entry: {SEMGREP_IMAGE} semgrep scan --error --config .guardrails/semgrep-rules.yml --exclude .guardrails/semgrep-tests/fixtures --exclude security/semgrep/tests/fixtures .
+        entry: {SEMGREP_IMAGE} semgrep scan --error --metrics off --disable-version-check --config .guardrails/semgrep-rules.yml --exclude .guardrails/semgrep-tests/fixtures --exclude security/semgrep/tests/fixtures .
         pass_filenames: false
       - id: guardrails-gitleaks
         name: Guardrails Gitleaks

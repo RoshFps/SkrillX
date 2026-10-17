@@ -155,6 +155,10 @@ The pinned container is:
 semgrep/semgrep@sha256:b94b53d02fd4a022f9eac4e2af1380f5c3c4c21400e79d3336bdff1d1db5e796
 ```
 
+Every scan passes `--metrics off --disable-version-check`, so Semgrep neither
+sends telemetry nor waits on its update check, which cannot reach the network
+from the container and otherwise stalls each run for well over a minute.
+
 Local scans prefer Docker with networking disabled. Without Docker they require
 host Semgrep `1.175.0` exactly. Missing rules, unavailable Docker, or a host
 version mismatch reports `NO RESULT`.

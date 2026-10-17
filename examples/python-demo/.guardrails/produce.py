@@ -220,7 +220,7 @@ def semgrep_result(
             command = [
                 "docker", "run", "--rm", "--network", "none",
                 "-v", f"{target.resolve()}:/src:ro", "-w", "/src",
-                SEMGREP_IMAGE, "semgrep", "scan", "--error",
+                SEMGREP_IMAGE, "semgrep", "scan", "--error", "--metrics", "off", "--disable-version-check",
                 "--config", ".guardrails/semgrep-rules.yml",
                 "--exclude", ".guardrails/semgrep-tests/fixtures",
                 "--exclude", "security/semgrep/tests/fixtures",
@@ -235,7 +235,8 @@ def semgrep_result(
         exact, actual = exact_host_version("semgrep", SEMGREP_VERSION, target, runner)
         if exact:
             command = [
-                "semgrep", "scan", "--error", "--config", str(rules),
+                "semgrep", "scan", "--error", "--metrics", "off", "--disable-version-check",
+                "--config", str(rules),
                 "--exclude", ".guardrails/semgrep-tests/fixtures",
                 "--exclude", "security/semgrep/tests/fixtures",
                 "--exclude", "examples/python-demo/.guardrails/semgrep-tests/fixtures", ".",
