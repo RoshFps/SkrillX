@@ -124,7 +124,7 @@ class RendererTests(unittest.TestCase):
                 ):
                     self.assertNotIn(private, text, path.name)
             page = (output / "index.html").read_text(encoding="utf-8")
-            self.assertIn('<span class="brand-name">AI Software Toolkit</span>', page)
+            self.assertIn('<span class="brand-name">SkrillX</span>', page)
             self.assertNotIn('<span class="brand-name">Proof</span>', page)
 
     def breakdown_card(self) -> dict[str, Any]:

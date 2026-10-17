@@ -1,6 +1,6 @@
 # Documentation
 
-AI Software Toolkit brings together skills, QA workflows, standards, and
+SkrillX brings together skills, QA workflows, standards, and
 Proof. Start with the task you need to perform.
 
 Six entry points, one per component:

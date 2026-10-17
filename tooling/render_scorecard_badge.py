@@ -1307,7 +1307,7 @@ def _html(metadata: dict[str, Any]) -> str:
 <a class="skip-link" href="#scorecard">Skip to scorecard</a>
 <header class="topbar"><div class="shell">
   <div class="brand"><span class="brand-mark" aria-hidden="true">AI</span><div>
-    <span class="brand-name">AI Software Toolkit</span><span class="repository">{safe['repository']}</span>
+    <span class="brand-name">SkrillX</span><span class="repository">{safe['repository']}</span>
   </div></div>
   <a class="repo-link" href="https://github.com/{safe['repository']}">View repository <span aria-hidden="true">↗</span></a>
 </div></header>

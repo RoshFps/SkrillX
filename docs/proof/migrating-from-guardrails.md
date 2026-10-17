@@ -32,7 +32,7 @@ Run the installer from a toolkit checkout that includes the rename, against
 your repository:
 
 ```sh
-python3 /path/to/ai-software-toolkit/tooling/install.py --target . --refresh-existing --dry-run
+python3 /path/to/SkrillX/tooling/install.py --target . --refresh-existing --dry-run
 ```
 
 It refuses to write anything while a Guardrails layout is present and prints

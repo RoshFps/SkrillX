@@ -206,7 +206,7 @@ Gitleaks does not rate severity; the report itself never leaves the runner.
 Install or add the profile with:
 
 ```sh
-python3 /path/to/ai-software-toolkit/tooling/install.py --target /path/to/repo --profile github
+python3 /path/to/SkrillX/tooling/install.py --target /path/to/repo --profile github
 ```
 
 | Capability | Provider/check | Required repository setup |
