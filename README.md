@@ -3,6 +3,7 @@
 **Move fast. Prove it works.** Shared skills, QA workflows, and Proof checks for
 planning, building, testing, securing, and releasing software with AI.
 
+[![Version](https://img.shields.io/github/v/release/RoshFps/SkrillX?label=version)](https://github.com/RoshFps/SkrillX/releases/latest)
 [![License](https://img.shields.io/github/license/RoshFps/SkrillX?label=license)](LICENSE)
 [![Scorecard Workflow](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml)
 
@@ -55,7 +56,7 @@ What's new in this version:
 - **Faster test runs.** `tooling/test.sh` runs test modules in parallel.
 - **Up-to-date pins.** The workflow templates pin every GitHub Action to its latest release.
 
-See the [changelog](CHANGELOG.md#unreleased) for details.
+See the [changelog](CHANGELOG.md#220---2026-10-17) for details.
 
 ## What the toolkit brings together
 
@@ -77,16 +78,11 @@ See [the toolkit vision](docs/vision.md) for the Plan → Build → Validate →
 Release → Improve direction and the distinction between available components,
 optional integrations, and future work.
 
-[![Version](https://img.shields.io/github/v/release/RoshFps/SkrillX?label=version)](https://github.com/RoshFps/SkrillX/releases/latest)
-[![License](https://img.shields.io/github/license/RoshFps/SkrillX?label=license)](LICENSE)
-[![Scorecard Workflow](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml)
-[![Latest PR Scorecard](https://roshfps.github.io/SkrillX/proof-badge.svg)](https://roshfps.github.io/SkrillX/)
-
 ## Start here
 
 Choose the entry point above for skills or QA. The demo below introduces
 Proof (named Guardrails in v1.0.0); it does not include the newer QA bootstrap and functional-QA
-integration listed under [Unreleased](CHANGELOG.md#unreleased).
+integration listed under [2.2.0](CHANGELOG.md#220---2026-10-17).
 
 Try the embedded Python demo in an isolated directory with Git, Python 3.11+
 and a POSIX shell. No account, token, Docker, or paid service is required to
@@ -200,8 +196,8 @@ uses advisory or enforced mode; a within-limit row is not proof that the PR's
 other checks passed. Thresholds and excluded paths are defined in the
 consumer's `.proof/change-scope.yaml`.
 
-The [live scorecard dashboard](https://roshfps.github.io/SkrillX/#size-title)
-shows the same measurements for its latest accepted PR snapshot. Its repository
+The scorecard dashboard, once GitHub Pages publishing is enabled for your
+repository, shows the same measurements for its latest accepted PR snapshot. Its repository
 label identifies whose changes are being measured; this toolkit dashboard does
 not aggregate the reference app's PRs. Older evidence without structured
 measurements shows unavailable. See [report details](docs/proof/control-setup.md#reading-the-pr-size-report).

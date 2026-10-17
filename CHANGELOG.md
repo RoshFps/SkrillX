@@ -8,6 +8,8 @@ or evidence contracts require a major release and migration guidance.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-17
+
 ### SkrillX
 
 - Adopt the latest Proof runtime, including credential
@@ -564,4 +566,5 @@ Initial public release.
 [0.1.0]: https://github.com/RoshFps/SkrillX/releases/tag/v0.1.0
 [0.2.0]: https://github.com/RoshFps/SkrillX/releases/tag/v0.2.0
 [1.0.0]: https://github.com/RoshFps/SkrillX/releases/tag/v1.0.0
-[Unreleased]: https://github.com/RoshFps/SkrillX/compare/v1.0.0...HEAD
+[2.2.0]: https://github.com/RoshFps/SkrillX/releases/tag/v2.2.0
+[Unreleased]: https://github.com/RoshFps/SkrillX/compare/v2.2.0...HEAD
