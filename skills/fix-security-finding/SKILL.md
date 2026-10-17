@@ -1,6 +1,6 @@
 ---
 name: fix-security-finding
-description: "Validate a security finding from a scanner or review, implement the minimal remediation, add regression coverage, and document residual risk without exposing secrets. Use when Semgrep, CodeQL, Gitleaks, Snyk, a security review, or ai-toolkit check reports a security defect to fix."
+description: "Validate a security finding from a scanner or review, implement the minimal remediation, add regression coverage, and document residual risk without exposing secrets. Use when Semgrep, CodeQL, Gitleaks, Snyk, a security review, or skrillx check reports a security defect to fix."
 ---
 
 # Fix Security Finding
@@ -13,7 +13,7 @@ repository has them installed.
 ## Inputs
 
 - The finding: tool, rule or CWE, file and line, severity, and the evidence
-  link (a scanner result, a `pr-review` finding JSON, or an `ai-toolkit check`
+  link (a scanner result, a `pr-review` finding JSON, or an `skrillx check`
   row with its reason code).
 - The repository's security policy (`SECURITY.md`, `policies/security.md`
   when present) and the affected component's threat model if documented.
@@ -69,7 +69,7 @@ scanner cannot be rerun and the fix cannot be proven.
   keep remediation incomplete until its owner confirms revocation/rotation and
   any required history cleanup. Do not manufacture a test containing the secret.
 - The originating scanner or check reports the finding resolved for the new
-  revision (`ai-toolkit check` row `passed`, or the finding absent).
+  revision (`skrillx check` row `passed`, or the finding absent).
 - Existing tests still pass.
 
 ## Outcome report

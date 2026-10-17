@@ -123,9 +123,19 @@ Install completion once, for example:
 
 ```bash
 skrillx completion bash > ~/.local/share/bash-completion/completions/skrillx
-skrillx completion zsh  > "${fpath[1]}/_ai-toolkit"
+skrillx completion zsh  > "${fpath[1]}/_skrillx"
 skrillx completion fish > ~/.config/fish/completions/skrillx.fish
 ```
+
+### Where the CLI conveniences live
+
+- `tooling/ai_toolkit/style.py` decides when output is colored and strips color
+  for pipes, CI logs, and `--no-color`.
+- `tooling/ai_toolkit/dashboard.py` renders the offline HTML scorecard written by
+  `skrillx check --html` and `skrillx report`.
+- `tooling/ai_toolkit/completion.py` generates the shell completion scripts.
+- `tooling/run_tests.py` is the parallel test runner behind `tooling/test.sh`
+  (`-j N` sets workers, `-k NAME` selects modules).
 
 ### Repository commands stay in repository variables
 

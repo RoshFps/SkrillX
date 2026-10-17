@@ -13,7 +13,7 @@ Semgrep reports `python.lang.security.audit.subprocess-shell-true` at `runner.py
 ## Protocol (per client)
 
 1. Copy the fixture into a fresh Git repository and commit it.
-2. Install this skill for the client (`ai-toolkit skills install --skill fix-security-finding --client <client>`).
+2. Install this skill for the client (`skrillx skills install --skill fix-security-finding --client <client>`).
 3. Ask the agent to perform the task using the skill by name.
 4. Capture: the agent's outcome report, `git diff` of the result, and the
    output of the verification commands the report names.

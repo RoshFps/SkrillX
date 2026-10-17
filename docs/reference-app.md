@@ -24,7 +24,7 @@ QA, and action skills require their own verification evidence.
 | CI workflows | The example's workflow copies are refreshed from `workflows/` and checked for parity; GitHub does not execute nested workflow files in this repository | Templates shipped; advisory configuration not live-verified by these copies |
 | Ground truth | `.proof/ground-truth-ai.yaml` maps the demo's architecture, testing, security, and deployment documents | Shipped |
 | Optional scorecard badge | `tools/` and the badge workflow described in the demo README | Shipped, opt-in |
-| `ai-toolkit` CLI | `ai-toolkit init` on a copy of the demo adopts the existing installation and records `toolkit.toml` / `toolkit.lock.json`; `check` and `doctor` run against it | Shipped; the committed demo does not yet carry the two files (see below) |
+| `skrillx` CLI | `skrillx init` on a copy of the demo adopts the existing installation and records `toolkit.toml` / `toolkit.lock.json`; `check` and `doctor` run against it | Shipped; the committed demo does not yet carry the two files (see below) |
 | Provider adapters | `.proof/adapter.py` is installed; the Snyk and FOSSA templates are not copied into the demo because it has no vendor accounts | Adapter shipped; live runs unverified (see the [ledger](providers/verification.md)) |
 | Functional QA | Not generated for the demo | Planned |
 | Repair via an action skill | Not demonstrated | Planned (needs a recorded run per client, see each skill's `VERIFICATION.md`) |
@@ -34,9 +34,9 @@ QA, and action skills require their own verification evidence.
 
 `toolkit.lock.json` records a hash of every installed file. The demo's
 `.proof/` copies are refreshed from source on many toolkit changes, so a
-committed lock would need `ai-toolkit update` on each refresh or it would
+committed lock would need `skrillx update` on each refresh or it would
 report the installer's own refresh as drift. That workflow is decided
-separately; until then, adopt the demo with `ai-toolkit init` in a scratch copy
+separately; until then, adopt the demo with `skrillx init` in a scratch copy
 when you want to exercise the CLI end to end.
 
 ## How to use it

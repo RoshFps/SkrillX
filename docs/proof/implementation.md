@@ -34,7 +34,7 @@ and selected workflow templates. Refresh preserves repository-owned policy,
 provider selection, documentation, scope, and ground-truth files.
 
 This source repository runs the workflow templates it ships with identical
-content, except the three listed in `NOT_INSTALLED` (`ai-toolkit-setup.yml`,
+content, except the three listed in `NOT_INSTALLED` (`skrillx-setup.yml`,
 `security-scanning.yml`, and `soak.yml`), so Dependabot's action bumps under
 `.github/workflows/` reach the other templates; the excluded ones still must
 use the same pins. `tooling/sync_workflow_templates.py` (repository-only, not

@@ -13,7 +13,7 @@ The seeded repository's unit test fails because `calc.divide` returns the wrong 
 ## Protocol (per client)
 
 1. Copy the fixture into a fresh Git repository and commit it.
-2. Install this skill for the client (`ai-toolkit skills install --skill fix-ci --client <client>`).
+2. Install this skill for the client (`skrillx skills install --skill fix-ci --client <client>`).
 3. Ask the agent to perform the task using the skill by name.
 4. Commit the fix, then rerun the checks in the clean worktree. Capture the
    initial and fixed SHAs, `git diff <initial-sha>..<fixed-sha>`, the agent's

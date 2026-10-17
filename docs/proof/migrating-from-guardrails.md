@@ -1,7 +1,7 @@
 # Migrating from Guardrails to Proof
 
 The Guardrails component is now named **Proof**. The rename is a hard cutover:
-the runtime, workflows, installer, and `ai-toolkit` CLI read only the Proof
+the runtime, workflows, installer, and `skrillx` CLI read only the Proof
 names. Nothing falls back to a Guardrails path or variable, and a missing
 `PROOF_*` variable reports an unconfigured producer, never a pass.
 
@@ -74,21 +74,21 @@ Guardrails v1 installations still need the clean reinstall described in the
 
 ## 2. Update `toolkit.toml` and renamed skills
 
-If you use the `ai-toolkit` CLI, it rejects a Guardrails `toolkit.toml`.
+If you use the `skrillx` CLI, it rejects a Guardrails `toolkit.toml`.
 Rename the `[guardrails]` table to `[proof]`, the `"guardrails"` entry in
 `components` to `"proof"`, and each `.guardrails/` path to `.proof/`.
 
 The `change-guardrail-control` skill is now `change-proof-control`.
-`ai-toolkit update` refuses to run while the old skill is installed and prints
+`skrillx update` refuses to run while the old skill is installed and prints
 its replacement, for example:
 
 ```text
 git rm -r -q --ignore-unmatch .agents/skills/change-guardrail-control
 rm -rf .agents/skills/change-guardrail-control
-ai-toolkit skills install --skill change-proof-control --client codex
+skrillx skills install --skill change-proof-control --client codex
 ```
 
-Then run `ai-toolkit update` to refresh `toolkit.lock.json`.
+Then run `skrillx update` to refresh `toolkit.lock.json`.
 
 ## 3. Rename repository variables
 

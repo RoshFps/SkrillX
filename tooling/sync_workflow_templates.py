@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Templates this repository ships but does not run itself. Every other template
 # must have an identical copy in .github/workflows/.
 NOT_INSTALLED = frozenset({
-    "ai-toolkit-setup.yml",  # starter workflow for consuming repositories
+    "skrillx-setup.yml",  # starter workflow for consuming repositories
     "security-scanning.yml",  # organization-style bundle; this repository runs the per-provider templates
     "soak.yml",  # awaits an environment-evidence producer
 })

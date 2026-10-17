@@ -198,7 +198,7 @@ class DiscoverAndInitTests(CliFixture):
         (self.target / ".gitignore").write_text("node_modules", encoding="utf-8")
         found = {"languages": [{"language": "python"}]}
         self.assertTrue(cli.ensure_gitignore(self.target, found))
-        self.assertEqual((self.target / ".gitignore").read_text(encoding="utf-8"), "node_modules\n# AI Software Toolkit scan artifacts\n.artifacts/\n__pycache__/\n")
+        self.assertEqual((self.target / ".gitignore").read_text(encoding="utf-8"), "node_modules\n# SkrillX scan artifacts\n.artifacts/\n__pycache__/\n")
         self.assertFalse(cli.ensure_gitignore(self.target, found))
         self.assertEqual(cli.gitignore_additions(self.target, {"languages": []}), [])
 

@@ -16,7 +16,7 @@ and the diagnostics that tell you where setup stands.
 
 Every provider is opt-in: selecting it as authoritative for a capability with
 `.proof/configure.py --select-provider CAPABILITY=PROVIDER` (or
-`ai-toolkit providers select`) and activating the capability is what makes its
+`skrillx providers select`) and activating the capability is what makes its
 evidence count. Selection is not a pass; only exact-revision evidence is.
 
 ## Adapter-owned commands
@@ -131,7 +131,7 @@ never secret values.
 ## Reason codes
 
 Non-passing results (`blocked`, `not_run`) carry a reason that starts with one
-of these codes. Reports and `ai-toolkit check` key their next action off the
+of these codes. Reports and `skrillx check` key their next action off the
 code; the evidence schema is unchanged (the code is the prefix of `reason`).
 
 | Code | Status | Meaning | Typical next action |
@@ -161,7 +161,7 @@ not used here.
 
 ## Diagnostics
 
-`ai-toolkit doctor` (and `.proof/doctor.py`) adds, for each selected
+`skrillx doctor` (and `.proof/doctor.py`) adds, for each selected
 external provider:
 
 - `provider.<id>.adapter` — whether the installed runtime carries the adapter

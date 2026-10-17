@@ -14,9 +14,9 @@ restating it.
 ## Inputs
 
 - The failing check: its name, the workflow or command, and the log or the
-  `ai-toolkit check` row (status `failed`, reason, evidence link).
+  `skrillx check` row (status `failed`, reason, evidence link).
 - The repository's validation commands (`PROOF_*_COMMAND` values,
-  `AGENTS.md`, or `ai-toolkit discover` output).
+  `AGENTS.md`, or `skrillx discover` output).
 - The base revision the check last passed on, when known.
 
 ## Permitted changes
@@ -55,7 +55,7 @@ the code disagree.
 
 - The exact failing command now exits 0 in a clean worktree.
 - Related checks still pass; list the commands run.
-- `ai-toolkit check` (when installed) shows the capability `passed` for the
+- `skrillx check` (when installed) shows the capability `passed` for the
   new revision.
 
 ## Outcome report

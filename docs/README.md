@@ -16,7 +16,7 @@ Six entry points, one per component:
 
 Also: [Vision and maturity](vision.md) (what is shipped, opt-in, or planned),
 [self-check](self-check.md) and [contributing](../CONTRIBUTING.md) for
-developing the toolkit, the [repository rename](repository-rename.md) note,
+developing the toolkit,
 the [Guardrails to Proof migration](proof/migrating-from-guardrails.md),
 and the [changelog](../CHANGELOG.md) with [v1.0.0 release notes](releases/v1.0.0.md).
 

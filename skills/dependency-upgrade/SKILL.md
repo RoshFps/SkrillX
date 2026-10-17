@@ -9,7 +9,7 @@ Move one dependency (or one tightly coupled group) forward safely.
 `dependency-risk-review` assesses risk before a change and
 `dependency-remediation` covers alert triage and lockfile hygiene; this skill
 performs the upgrade and proves compatibility. Detect the package manager from
-the repository (`ai-toolkit discover` reports it); never mix managers.
+the repository (`skrillx discover` reports it); never mix managers.
 
 ## Inputs
 
@@ -40,7 +40,7 @@ removing the lockfile, or disabling audit checks.
 3. Build and run the full test suite; fix compile or test failures caused by
    documented breaking changes only.
 4. For a security-driven upgrade, rerun the dependency scanner that raised
-   the alert (Snyk, Dependabot, `pip-audit`, `npm audit`, or `ai-toolkit check`)
+   the alert (Snyk, Dependabot, `pip-audit`, `npm audit`, or `skrillx check`)
    and confirm the advisory is resolved. For a feature or deprecation upgrade,
    verify the requested behavior and run the repository's normal dependency
    audit when available; an unavailable audit is not a passing scan.
