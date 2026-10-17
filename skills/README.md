@@ -49,7 +49,7 @@ One canonical source serves both clients: the `SKILL.md` frontmatter (`name`,
 `description`) is what Claude Code reads, and `agents/openai.yaml` carries the
 Codex interface. `--client` only changes the default destination.
 
-The [`ai-toolkit` CLI](../docs/install.md) installs the same canonical skills
+The [`skrillx` CLI](../docs/install.md) installs the same canonical skills
 for Codex (`.agents/skills`) and Claude Code (`.claude/skills`) without
 `rsync`, and records them in `toolkit.lock.json`:
 
@@ -74,7 +74,7 @@ permitted changes, stop conditions, verification, and outcome report, ships a
 seeded fixture under `tooling/tests/fixtures/skills/<name>/`, and keeps a
 `VERIFICATION.md` ledger with one row per supported client (Codex, Claude
 Code). A skill is verified only when a live run is recorded there;
-`tooling/validate-skills.py` requires both rows. `ai-toolkit check` names the
+`tooling/validate-skills.py` requires both rows. `skrillx check` names the
 applicable action skill for each failed capability; running it is a separate,
 explicit step.
 
@@ -154,7 +154,7 @@ install only the skills they actually need.
   verify, where the review skills only report.
 - Use `skill-installer` to install or refresh canonical skills locally.
 - Use `toolkit-setup` to install, diagnose, or refresh the whole toolkit
-  through the shared `ai-toolkit` CLI; it runs the same discovery and
+  through the shared `skrillx` CLI; it runs the same discovery and
   installation code as the CLI and the GitHub starter workflow.
 
 ## Support Bundle

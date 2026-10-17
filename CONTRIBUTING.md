@@ -94,7 +94,7 @@ Before a toolkit release:
    [provider verification ledger](docs/providers/verification.md) and each
    action skill's `VERIFICATION.md` before describing anything as verified.
 6. Build the release assets: `python3 tooling/build_archive.py` for
-   `ai-toolkit.pyz` and its checksum, and `tooling/package-speckit-preset.sh`
+   `skrillx.pyz` and its checksum, and `tooling/package-speckit-preset.sh`
    for the Spec Kit preset archive.
 
 Keep release claims tied to observed evidence. A catalog entry or workflow file

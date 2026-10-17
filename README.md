@@ -3,8 +3,8 @@
 **Move fast. Prove it works.** Shared skills, QA workflows, and Proof checks for
 planning, building, testing, securing, and releasing software with AI.
 
-[![License](https://img.shields.io/github/license/RoshFps/ai-software-toolkit?label=license)](LICENSE)
-[![Scorecard Workflow](https://github.com/RoshFps/ai-software-toolkit/actions/workflows/guardrails-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/ai-software-toolkit/actions/workflows/guardrails-scorecard.yml)
+[![License](https://img.shields.io/github/license/RoshFps/SkrillX?label=license)](LICENSE)
+[![Scorecard Workflow](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml)
 
 AI Software Toolkit supports development, QA, security, and release teams.
 Skills guide repeatable work, functional QA exercises application behavior,
@@ -18,31 +18,40 @@ Maintained by [Roshan Immanuel](https://github.com/RoshFps). See
 ## Get going in one minute
 
 ```sh
-git clone https://github.com/RoshFps/ai-software-toolkit.git
-bash ai-software-toolkit/tooling/install-cli.sh   # puts `ai-toolkit` on your PATH
+git clone https://github.com/RoshFps/SkrillX.git
+bash SkrillX/tooling/install-cli.sh   # puts `skrillx` on your PATH
 cd /path/to/your/repo
-ai-toolkit                                   # prints the quick start
+skrillx                                   # prints the quick start
+```
+
+On Windows, run the install from **Git Bash** (installed with Git for Windows), not
+PowerShell. PowerShell cannot run the `.sh` installer, and `bash` in PowerShell can
+point to WSL, which cannot see the Windows checkout path. Inside the cloned folder:
+
+```sh
+bash tooling/install-cli.sh           # then open a new Git Bash window
+skrillx                               # prints the quick start
 ```
 
 | Step | Command | What happens |
 | --- | --- | --- |
-| 1 | `ai-toolkit discover` | Detects languages, build/test/lint commands, workflows, and agent clients. Read-only. |
-| 2 | `ai-toolkit init --preview` | Shows every file it would add. Nothing is written. |
-| 3 | `ai-toolkit init --yes` | Installs Proof, the starter skills, and QA bootstrap. |
-| 4 | `ai-toolkit doctor` | Reports what is installed, configured, and verified, and the next step for each gap. |
-| 5 | `ai-toolkit check --html` | Runs the scan and writes an HTML scorecard dashboard. |
+| 1 | `skrillx discover` | Detects languages, build/test/lint commands, workflows, and agent clients. Read-only. |
+| 2 | `skrillx init --preview` | Shows every file it would add. Nothing is written. |
+| 3 | `skrillx init --yes` | Installs Proof, the starter skills, and QA bootstrap. |
+| 4 | `skrillx doctor` | Reports what is installed, configured, and verified, and the next step for each gap. |
+| 5 | `skrillx check --html` | Runs the scan and writes an HTML scorecard dashboard. |
 
 What's new in this version:
 
-- **HTML scorecard dashboard.** `ai-toolkit check --html` or
-  `ai-toolkit report --open` renders the latest result as a single offline page
+- **HTML scorecard dashboard.** `skrillx check --html` or
+  `skrillx report --open` renders the latest result as a single offline page
   with status filters, search, and light/dark themes.
 - **Clearer terminal output.** Colored PASS / FAIL / NO_RESULT, a one-line
   summary, a quick start when run bare, and "did you mean" hints for typos.
   Plain output in pipes and CI, or with `--no-color` / `NO_COLOR=1`.
-- **Find skills fast.** `ai-toolkit skills list` shows what each skill does;
+- **Find skills fast.** `skrillx skills list` shows what each skill does;
   `skills search security` and `skills show code-review` find and explain one.
-- **Tab completion.** `ai-toolkit completion bash|zsh|fish`.
+- **Tab completion.** `skrillx completion bash|zsh|fish`.
 - **Faster test runs.** `tooling/test.sh` runs test modules in parallel.
 - **Up-to-date pins.** The workflow templates pin every GitHub Action to its latest release.
 
@@ -68,10 +77,10 @@ See [the toolkit vision](docs/vision.md) for the Plan → Build → Validate →
 Release → Improve direction and the distinction between available components,
 optional integrations, and future work.
 
-[![Version](https://img.shields.io/github/v/release/ravisingh11/ai-software-toolkit?label=version)](https://github.com/ravisingh11/ai-software-toolkit/releases/latest)
-[![License](https://img.shields.io/github/license/ravisingh11/ai-software-toolkit?label=license)](LICENSE)
-[![Scorecard Workflow](https://github.com/ravisingh11/ai-software-toolkit/actions/workflows/proof-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/ravisingh11/ai-software-toolkit/actions/workflows/proof-scorecard.yml)
-[![Latest PR Scorecard](https://ravisingh11.github.io/ai-software-toolkit/proof-badge.svg)](https://ravisingh11.github.io/ai-software-toolkit/)
+[![Version](https://img.shields.io/github/v/release/RoshFps/SkrillX?label=version)](https://github.com/RoshFps/SkrillX/releases/latest)
+[![License](https://img.shields.io/github/license/RoshFps/SkrillX?label=license)](LICENSE)
+[![Scorecard Workflow](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml)
+[![Latest PR Scorecard](https://roshfps.github.io/SkrillX/proof-badge.svg)](https://roshfps.github.io/SkrillX/)
 
 ## Start here
 
@@ -90,8 +99,8 @@ get a scorecard.
 
 ```sh
 demo_workspace="$(mktemp -d)"
-git clone https://github.com/RoshFps/ai-software-toolkit.git "$demo_workspace/ai-software-toolkit"
-standards_root="$demo_workspace/ai-software-toolkit"
+git clone https://github.com/RoshFps/SkrillX.git "$demo_workspace/SkrillX"
+standards_root="$demo_workspace/SkrillX"
 cp -R "$standards_root/examples/python-demo" "$demo_workspace/python-demo"
 cd "$demo_workspace/python-demo"
 
@@ -143,7 +152,7 @@ not a pass.
 
 ## Install
 
-The shared [`ai-toolkit` CLI](docs/install.md) is the front door for Proof,
+The shared [`skrillx` CLI](docs/install.md) is the front door for Proof,
 skills, and QA bootstrap: `discover` and `init --preview` are read-only,
 `init --yes` installs the selected components and records `toolkit.toml` and
 `toolkit.lock.json`, `doctor` reports installed / configured / verified state
@@ -191,7 +200,7 @@ uses advisory or enforced mode; a within-limit row is not proof that the PR's
 other checks passed. Thresholds and excluded paths are defined in the
 consumer's `.proof/change-scope.yaml`.
 
-The [live scorecard dashboard](https://ravisingh11.github.io/ai-software-toolkit/#size-title)
+The [live scorecard dashboard](https://roshfps.github.io/SkrillX/#size-title)
 shows the same measurements for its latest accepted PR snapshot. Its repository
 label identifies whose changes are being measured; this toolkit dashboard does
 not aggregate the reference app's PRs. Older evidence without structured

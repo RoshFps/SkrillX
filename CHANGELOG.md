@@ -1,12 +1,30 @@
 # Changelog
 
-All notable changes to AI Software Toolkit are documented here.
+All notable changes to SkrillX (a fork of AI Software Toolkit) are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/). Starting with
 1.0, incompatible changes to the documented public runtime, configuration,
 or evidence contracts require a major release and migration guidance.
 
 ## [Unreleased]
+
+### SkrillX fork
+
+- Sync with upstream AI Software Toolkit `main` (11fab01), including credential
+  isolation for the Snyk, FOSSA, and AI PR Review templates, the Proof rename,
+  the `qa-bootstrap` and action skills, and the new scorecard measurements.
+- `skrillx` CLI 2.2.0: quick start and typo hints, colored output, a `check`
+  summary line, an HTML scorecard dashboard (`check --html`, `report`),
+  `skills list|search|show`, shell completion, a PATH installer
+  (`tooling/install-cli.sh`), and a parallel test runner (`tooling/run_tests.py`).
+- Rename the project to SkrillX and the command to `skrillx`
+  (`bin/skrillx`, `workflows/skrillx-setup.yml`, `SKRILLX_PYTHON`).
+- Add Windows install steps (Git Bash) to the README and `docs/install.md`.
+- Run Pylint error-level checks in `tooling/lint.sh` (`.pylintrc`).
+- Scope the setup workflow's write token to `git push` and `gh pr create`, compile
+  validator glob patterns once, and make `tooling/test.sh` executable.
+- Restore the original author's copyright in `LICENSE` and `NOTICE`: Ravi Singh
+  and Roshan Immanuel are both credited, and `CONTRIBUTORS.md` links upstream.
 
 - Preserve consumer edits across successive ordinary toolkit upgrades, including
   installations first adopted without a lock. Unresolved conflicts keep their
@@ -273,7 +291,7 @@ or evidence contracts require a major release and migration guidance.
   names are unchanged. The next release must be a major version. See
   [migrating from Guardrails](docs/proof/migrating-from-guardrails.md).
 
-- Fix three `ai-toolkit` review follow-ups: re-running `init` for another
+- Fix three `skrillx` review follow-ups: re-running `init` for another
   component no longer installs the default skill set over a narrower
   selection; a project `skills install` (or `qa bootstrap`) adds its component
   to `toolkit.toml` and the lock so the next `update` keeps the files; and
@@ -354,7 +372,7 @@ or evidence contracts require a major release and migration guidance.
   `execution-error`, `analysis-incomplete`, `revision-mismatch`,
   `unsupported-project`, `timed-out`); the evidence schema is unchanged. The
   FOSSA CLI is pinned by version and SHA-256. `doctor` adds adapter, local
-  credential, and template rows for selected external providers; `ai-toolkit
+  credential, and template rows for selected external providers; `skrillx
   check` turns reason codes into next actions. Add provider guides, a reason
   code reference, contract tests for every outcome, and a live verification
   ledger; no adapter is labelled verified until a live run is recorded there.
@@ -375,7 +393,7 @@ or evidence contracts require a major release and migration guidance.
   `execution-error`, `analysis-incomplete`, `revision-mismatch`,
   `unsupported-project`, `timed-out`); the evidence schema is unchanged. The
   FOSSA CLI is pinned by version and SHA-256. `doctor` adds adapter, local
-  credential, and template rows for selected external providers; `ai-toolkit
+  credential, and template rows for selected external providers; `skrillx
   check` turns reason codes into next actions. Add provider guides, a reason
   code reference, contract tests for every outcome, and a live verification
   ledger; no adapter is labelled verified until a live run is recorded there.
@@ -387,7 +405,7 @@ or evidence contracts require a major release and migration guidance.
   Semgrep fixtures that intentionally shadow third-party modules are
   excluded.
 
-- Add the shared `ai-toolkit` CLI (`tooling/ai_toolkit`) with `discover`,
+- Add the shared `skrillx` CLI (`tooling/ai_toolkit`) with `discover`,
   `init`, `doctor`, `check`, `providers`, `skills`, `qa`, and `update`. The CLI
   dispatches to the existing installer, diagnostics, scanner, configuration,
   and skill sources; it does not reimplement evaluation, and installed
@@ -404,7 +422,7 @@ or evidence contracts require a major release and migration guidance.
   skill for failed capabilities. `update` refreshes unmodified managed files,
   preserves modified ones as reported conflicts, keeps a backup, and supports
   `--rollback`. Add `tooling/build_archive.py` for a checksummed
-  `ai-toolkit.pyz`, the `toolkit-setup` skill, the `AI Toolkit Setup` starter
+  `skrillx.pyz`, the `toolkit-setup` skill, the `AI Toolkit Setup` starter
   workflow, and the install guide. The `.guardrails/` runtime contract,
   installer behavior, and existing check identities are unchanged.
 

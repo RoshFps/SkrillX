@@ -7,7 +7,7 @@ Six entry points, one per component:
 
 | Entry point | Start here | Then |
 | --- | --- | --- |
-| **Install** | [Install with `ai-toolkit`](install.md) — one CLI for discovery, preview, installation, `doctor`, `check`, and `update` | [Quickstart](quickstart.md) for the underlying installer and scanner |
+| **Install** | [Install with `skrillx`](install.md) — one CLI for discovery, preview, installation, `doctor`, `check`, and `update` | [Quickstart](quickstart.md) for the underlying installer and scanner |
 | **Proof** | [Proof guides](proof/README.md) — runtime model, control setup, operating guide, scorecards | [Producer contract](proof/producer-contract.md), [control status](proof/control-status.md) |
 | **Skills** | [Skill catalog](../skills/README.md) — review skills, the five action skills, installation for Codex and Claude Code | Each action skill's `VERIFICATION.md` for what has been proven |
 | **QA** | [QA bootstrap](../skills/qa-bootstrap/SKILL.md) — generate the `qa` orchestrator | [Plans, findings, and regression reruns](../skills/qa-bootstrap/references/plans-and-findings.md) |

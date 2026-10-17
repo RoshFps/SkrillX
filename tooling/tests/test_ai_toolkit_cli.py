@@ -234,7 +234,7 @@ class DoctorCheckTests(CliFixture):
         code, out, _ = run_cli("doctor", "--target", str(self.target))
         self.assertEqual(code, 1)
         self.assertIn("missing    proof", out)
-        self.assertIn("Run `ai-toolkit init`", out)
+        self.assertIn("Run `skrillx init`", out)
         code, _, err = run_cli("check", "--target", str(self.target))
         self.assertEqual(code, 2)
         self.assertIn("not installed", err)
@@ -523,7 +523,7 @@ class EntryPointTests(unittest.TestCase):
     def test_module_entry_point(self):
         completed = subprocess.run([sys.executable, str(ROOT / "tooling" / "ai_toolkit"), "--version"], text=True, capture_output=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("ai-toolkit", completed.stdout)
+        self.assertIn("skrillx", completed.stdout)
         completed = subprocess.run([sys.executable, "-m", "ai_toolkit", "skills", "list"], cwd=ROOT / "tooling", text=True, capture_output=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
@@ -616,7 +616,7 @@ class ReviewRegressionTests(CliFixture):
             "retired Guardrails skills",
             "git rm -r -q --ignore-unmatch .agents/skills/change-guardrail-control",
             "rm -rf .agents/skills/change-guardrail-control",
-            "ai-toolkit skills install --skill change-proof-control --client codex",
+            "skrillx skills install --skill change-proof-control --client codex",
         ):
             self.assertIn(expected, err)
         self.assertTrue((skills_root / "change-guardrail-control").is_dir())
@@ -624,7 +624,7 @@ class ReviewRegressionTests(CliFixture):
         shutil.rmtree(skills_root / "change-guardrail-control")
         code, _, err = run_cli("update", "--target", str(self.target), "--force")
         self.assertEqual(code, 2, "a recorded retired skill without its replacement is not silently dropped")
-        self.assertIn("ai-toolkit skills install --skill change-proof-control --client codex", err)
+        self.assertIn("skrillx skills install --skill change-proof-control --client codex", err)
         self.assertEqual(run_cli("skills", "install", "--skill", "change-proof-control", "--client", "codex", "--target", str(self.target))[0], 0)
         code, out, _ = run_cli("update", "--target", str(self.target), "--force")
         self.assertEqual(code, 0, out)
@@ -753,7 +753,7 @@ class ReviewRegressionTests(CliFixture):
         self.assertFalse(missing.exists())
         self.assertEqual((self.target / config.TOML_NAME).read_bytes(), before)
         self.assertEqual(lock_path.read_bytes(), real_lock.read_bytes())
-        self.assertFalse((self.target / ".artifacts" / "ai-toolkit" / "backup").exists())
+        self.assertFalse((self.target / ".artifacts" / "skrillx" / "backup").exists())
 
     def test_update_restores_files_when_the_records_cannot_be_written(self):
         self.assertEqual(self.init("--components", "proof")[0], 0)
@@ -835,7 +835,7 @@ class ReviewRegressionTests(CliFixture):
         self.assertIn("not a regular file", err)
         self.assertFalse(missing.exists())
         self.assertTrue(lock_path.is_dir())
-        self.assertFalse((self.target / ".artifacts" / "ai-toolkit" / "backup").exists())
+        self.assertFalse((self.target / ".artifacts" / "skrillx" / "backup").exists())
 
     def test_skills_install_and_qa_bootstrap_refuse_before_installing_when_records_are_unwritable(self):
         self.assertEqual(self.init("--components", "proof")[0], 0)
@@ -877,7 +877,7 @@ class ReviewRegressionTests(CliFixture):
         self.assertFalse((self.target / ".agents" / "skills" / "code-review").exists())
         self.assertFalse((self.target / ".agents" / "skills" / "qa-bootstrap").exists())
         self.assertEqual((self.target / config.LOCK_NAME).read_bytes(), lock_before)
-        self.assertFalse((self.target / ".artifacts" / "ai-toolkit" / "backup").exists())
+        self.assertFalse((self.target / ".artifacts" / "skrillx" / "backup").exists())
         toml_path.chmod(0o644)
         code, out, _ = run_cli("skills", "install", "--skill", "code-review", "--target", str(self.target))
         self.assertEqual(code, 0, out)
@@ -993,7 +993,7 @@ class ReviewRegressionTests(CliFixture):
         self.assertEqual(code, 0, out)
         self.assertTrue((self.target / ".claude" / "skills" / "code-review" / "SKILL.md").is_file())
         # Install backups are transient: none survive, whether the install failed or succeeded.
-        backups = self.target / ".artifacts" / "ai-toolkit" / "backup"
+        backups = self.target / ".artifacts" / "skrillx" / "backup"
         self.assertEqual(sorted(backups.iterdir()) if backups.is_dir() else [], [])
 
     def test_install_backups_never_disturb_an_update_backup(self):

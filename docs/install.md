@@ -1,6 +1,6 @@
-# Install with the `ai-toolkit` CLI
+# Install with the `skrillx` CLI
 
-The `ai-toolkit` command is one front door for Proof, shared skills, and
+The `skrillx` command is one front door for Proof, shared skills, and
 QA bootstrap. It is a facade: `init`, `doctor`, `check`, `providers`, `skills`,
 `qa`, and `update` dispatch to the existing installer, diagnostics, scanner,
 configuration, and skill sources under `tooling/`. It adds discovery, the
@@ -18,14 +18,20 @@ for GitHub. Python 3.11+ is the only prerequisite.
 The quickest way is to put the checkout's launcher on your `PATH`:
 
 ```bash
-git clone https://github.com/RoshFps/ai-software-toolkit.git
-bash ai-software-toolkit/tooling/install-cli.sh       # installs ~/.local/bin/ai-toolkit
-ai-toolkit --version
+git clone https://github.com/RoshFps/SkrillX.git
+bash SkrillX/tooling/install-cli.sh       # installs ~/.local/bin/skrillx
+skrillx --version
 ```
 
 `bash tooling/install-cli.sh --prefix DIR` installs somewhere else and `--uninstall`
 removes it. The wrapper runs the checkout, so `git pull` updates the command.
-Set `AI_TOOLKIT_PYTHON` to choose the interpreter (Python 3.11+).
+Set `SKRILLX_PYTHON` to choose the interpreter (Python 3.11+).
+
+On Windows, run `bash tooling/install-cli.sh` from **Git Bash** inside the cloned
+folder, then open a new Git Bash window before running `skrillx`. PowerShell cannot
+run the `.sh` installer, and the `bash` it finds may be WSL, which cannot see
+`C:\...` paths. Without Git Bash, call the CLI with Python from PowerShell:
+`python C:\path\to\SkrillX\tooling\ai_toolkit --version`.
 
 You can also run it directly from a source checkout:
 
@@ -36,13 +42,13 @@ python3 <toolkit-root>/tooling/ai_toolkit --version
 or use the single-file archive built with `tooling/build_archive.py`:
 
 ```bash
-python3 tooling/build_archive.py --output dist/ai-toolkit.pyz
-python3 tooling/build_archive.py --verify dist/ai-toolkit.pyz
-python3 dist/ai-toolkit.pyz --version
+python3 tooling/build_archive.py --output dist/skrillx.pyz
+python3 tooling/build_archive.py --verify dist/skrillx.pyz
+python3 dist/skrillx.pyz --version
 ```
 
 The archive bundles the source subset installation needs. On first run it
-extracts that payload to `~/.cache/ai-toolkit/<checksum>/` (override with
+extracts that payload to `~/.cache/skrillx/<checksum>/` (override with
 `AI_TOOLKIT_CACHE`) and runs the CLI from there, so `init` copies real files
 into your repository exactly as a checkout does. Always verify a downloaded
 archive against its `.sha256` asset from the same pinned release; `update`
@@ -51,9 +57,9 @@ never fetches anything on its own.
 ## Set up a repository
 
 ```bash
-python3 ai-toolkit.pyz discover --target .        # read-only
-python3 ai-toolkit.pyz init --target . --preview   # nothing is written
-python3 ai-toolkit.pyz init --target . --yes       # apply
+python3 skrillx.pyz discover --target .        # read-only
+python3 skrillx.pyz init --target . --preview   # nothing is written
+python3 skrillx.pyz init --target . --yes       # apply
 ```
 
 `discover` detects Python and Node projects, candidate build/test/lint
@@ -94,31 +100,31 @@ to refresh.
 
 | Command | What it does |
 | --- | --- |
-| `ai-toolkit` | Prints a five-step quick start. |
-| `ai-toolkit check --html` | Runs the scan, prints a summary, and writes `.artifacts/ai-toolkit/scorecard.html`. |
-| `ai-toolkit report` | Shows the last check again without rescanning. |
-| `ai-toolkit report --open` | Writes the HTML scorecard and opens it in your browser. |
-| `ai-toolkit skills list` | Every skill with a one-line description on a terminal (`*` marks the starter set); one name per line when piped, or use `--long`. |
-| `ai-toolkit skills search WORDS` | Finds skills by name or description (for example `skills search security`). |
-| `ai-toolkit skills show NAME` | A skill's full description, files, and install command. |
-| `ai-toolkit completion bash\|zsh\|fish` | Prints a tab-completion script for your shell. |
+| `skrillx` | Prints a five-step quick start. |
+| `skrillx check --html` | Runs the scan, prints a summary, and writes `.artifacts/skrillx/scorecard.html`. |
+| `skrillx report` | Shows the last check again without rescanning. |
+| `skrillx report --open` | Writes the HTML scorecard and opens it in your browser. |
+| `skrillx skills list` | Every skill with a one-line description on a terminal (`*` marks the starter set); one name per line when piped, or use `--long`. |
+| `skrillx skills search WORDS` | Finds skills by name or description (for example `skills search security`). |
+| `skrillx skills show NAME` | A skill's full description, files, and install command. |
+| `skrillx completion bash\|zsh\|fish` | Prints a tab-completion script for your shell. |
 
 The HTML scorecard is a single offline file (no network requests) with
 status filters, search, and light/dark themes; it only displays the
 evaluator's statuses and never recomputes them. `check` also saves the result
-card to `.artifacts/ai-toolkit/last-check.json`, which `report` reads.
+card to `.artifacts/skrillx/last-check.json`, which `report` reads.
 
 Terminal output is colored only on an interactive terminal. Pipes, CI logs,
 and `--json` stay plain; `--no-color` or `NO_COLOR=1` turns color off and
 `FORCE_COLOR=1` turns it on. A mistyped command gets a suggestion
-(`ai-toolkit doctr` → "Did you mean `ai-toolkit doctor`?").
+(`skrillx doctr` → "Did you mean `skrillx doctor`?").
 
 Install completion once, for example:
 
 ```bash
-ai-toolkit completion bash > ~/.local/share/bash-completion/completions/ai-toolkit
-ai-toolkit completion zsh  > "${fpath[1]}/_ai-toolkit"
-ai-toolkit completion fish > ~/.config/fish/completions/ai-toolkit.fish
+skrillx completion bash > ~/.local/share/bash-completion/completions/skrillx
+skrillx completion zsh  > "${fpath[1]}/_ai-toolkit"
+skrillx completion fish > ~/.config/fish/completions/skrillx.fish
 ```
 
 ### Repository commands stay in repository variables
@@ -154,7 +160,7 @@ github_profile = false    # true after init --profile github
 so `update` reproduces it even when a workflow file of the same name is
 consumer-owned or the installed policy is missing. Policy modes and provider
 selection stay in `.proof/` and change only through
-`.proof/configure.py` (or `ai-toolkit providers select CAPABILITY=PROVIDER`).
+`.proof/configure.py` (or `skrillx providers select CAPABILITY=PROVIDER`).
 
 ### `toolkit.lock.json`
 
@@ -168,7 +174,7 @@ from the installer's ownership markers on the first `update`.
 ## Diagnose: `doctor`
 
 ```bash
-python3 ai-toolkit.pyz doctor --target .
+python3 skrillx.pyz doctor --target .
 ```
 
 `doctor` is read-only; it never executes producers or configured commands.
@@ -186,7 +192,7 @@ that exists; it is not a pass.
 ## Check: what ran, what failed, what remains unverified
 
 ```bash
-python3 ai-toolkit.pyz check --target .
+python3 skrillx.pyz check --target .
 ```
 
 `check` runs the installed scanner (`.proof/scan.py`) and groups the
@@ -199,13 +205,13 @@ decision.
 ## Providers, skills, QA
 
 ```bash
-python3 ai-toolkit.pyz providers                       # list with credentials and templates
-python3 ai-toolkit.pyz providers show sonarqube
-python3 ai-toolkit.pyz providers select deep-sast=snyk-code
-python3 ai-toolkit.pyz skills install --skill starter --client codex,claude-code
-python3 ai-toolkit.pyz skills refresh --skill all --user
-python3 ai-toolkit.pyz qa status
-python3 ai-toolkit.pyz qa bootstrap --client claude-code
+python3 skrillx.pyz providers                       # list with credentials and templates
+python3 skrillx.pyz providers show sonarqube
+python3 skrillx.pyz providers select deep-sast=snyk-code
+python3 skrillx.pyz skills install --skill starter --client codex,claude-code
+python3 skrillx.pyz skills refresh --skill all --user
+python3 skrillx.pyz qa status
+python3 skrillx.pyz qa bootstrap --client claude-code
 ```
 
 Skills have one canonical source under `skills/` and are copied to
@@ -217,20 +223,20 @@ generate the `qa` orchestrator. Functional QA stays advisory.
 ## Update and roll back
 
 ```bash
-python3 ai-toolkit.pyz update --target . --dry-run
-python3 ai-toolkit.pyz update --target .
-python3 ai-toolkit.pyz update --target . --rollback
+python3 skrillx.pyz update --target . --dry-run
+python3 skrillx.pyz update --target .
+python3 skrillx.pyz update --target . --rollback
 ```
 
 `update` refreshes unmodified managed files from the running toolkit
 revision, preserves modified files and lists them as conflicts with the
-canonical version copied beside them under `.artifacts/ai-toolkit/conflicts/`,
+canonical version copied beside them under `.artifacts/skrillx/conflicts/`,
 restores missing files (including a partially deleted `.proof/`), and
 rewrites the lock. Only skills the previous lock recorded are refreshed
 (their canonical files are rewritten; files you added inside the directory
 are kept) or restored when the directory was deleted; a directory you created
 under a canonical skill name is left alone and listed until you adopt it with
-`ai-toolkit skills install`, which records project installs in the lock and
+`skrillx skills install`, which records project installs in the lock and
 adds the `skills` component (and `qa bootstrap` the `qa` component) to
 `toolkit.toml`, so a later `update` keeps managing them instead of treating
 them as removed. The install that first activates a component installs and
@@ -259,7 +265,7 @@ conflicts. Accepting the offered `.toolkit` copy resolves that conflict for
 the next upgrade. This also applies to installations without a prior lock;
 the baseline never comes from the preserved local bytes.
 A backup of every managed file
-is kept under `.artifacts/ai-toolkit/backup/<timestamp>-<unique-id>/`; even
+is kept under `.artifacts/skrillx/backup/<timestamp>-<unique-id>/`; even
 updates within the same second have separate backups. `--rollback`
 restores it and the previous lock. `update`, a project `skills install`, and
 `qa bootstrap` refuse before touching any file when `toolkit.toml` or

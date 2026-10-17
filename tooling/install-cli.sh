@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Put `ai-toolkit` on your PATH with a wrapper that runs bin/ai-toolkit from this checkout.
+# Put `skrillx` on your PATH with a wrapper that runs bin/skrillx from this checkout.
 #
-#   bash tooling/install-cli.sh                 # installs ~/.local/bin/ai-toolkit
-#   bash tooling/install-cli.sh --prefix DIR    # installs DIR/ai-toolkit
+#   bash tooling/install-cli.sh                 # installs ~/.local/bin/skrillx
+#   bash tooling/install-cli.sh --prefix DIR    # installs DIR/skrillx
 #   bash tooling/install-cli.sh --uninstall     # removes it
 #
 # The wrapper runs this checkout, so `git pull` updates the command too.
@@ -19,9 +19,9 @@ while [[ $# -gt 0 ]]; do
     *) echo "ERROR unknown option: $1" >&2; exit 2 ;;
   esac
 done
-link="${prefix}/ai-toolkit"
+link="${prefix}/skrillx"
 
-marker="# ai-toolkit launcher (written by tooling/install-cli.sh)"
+marker="# skrillx launcher (written by tooling/install-cli.sh)"
 managed() { [[ -L "$1" ]] || { [[ -f "$1" ]] && grep -qF "${marker}" "$1"; }; }
 
 if [[ "${uninstall}" == 1 ]]; then
@@ -36,11 +36,11 @@ mkdir -p "${prefix}"
 # A small wrapper (not a symlink) so the checkout's file modes are never changed
 # and the command works even where the launcher lost its executable bit.
 rm -f "${link}"
-printf '#!/usr/bin/env bash\n%s\nexec bash %q "$@"\n' "${marker}" "${repo_root}/bin/ai-toolkit" > "${link}"
+printf '#!/usr/bin/env bash\n%s\nexec bash %q "$@"\n' "${marker}" "${repo_root}/bin/skrillx" > "${link}"
 chmod +x "${link}"
-echo "Installed ${link} -> ${repo_root}/bin/ai-toolkit"
+echo "Installed ${link} -> ${repo_root}/bin/skrillx"
 case ":${PATH}:" in
   *":${prefix}:"*) ;;
   *) echo "Add ${prefix} to your PATH, for example: echo 'export PATH=\"${prefix}:\$PATH\"' >> ~/.bashrc" ;;
 esac
-echo "Try: ai-toolkit    (tab completion: ai-toolkit completion bash|zsh|fish)"
+echo "Try: skrillx    (tab completion: skrillx completion bash|zsh|fish)"

@@ -87,12 +87,12 @@ class EntryPointUsabilityTests(unittest.TestCase):
         code, out, err = run_cli()
         self.assertEqual(code, 0, err)
         self.assertIn("Quick start", out)
-        self.assertIn("ai-toolkit init --preview", out)
+        self.assertIn("skrillx init --preview", out)
 
     def test_typo_suggests_the_closest_command(self) -> None:
         code, _, err = run_cli("doctr")
         self.assertEqual(code, 2)
-        self.assertIn("Did you mean `ai-toolkit doctor`?", err)
+        self.assertIn("Did you mean `skrillx doctor`?", err)
         with self.assertRaises(SystemExit):
             with contextlib.redirect_stderr(io.StringIO()):
                 cli.main(["zzzzzz"])
@@ -173,7 +173,7 @@ class SavedCheckTests(unittest.TestCase):
     def test_report_without_a_saved_check_explains_what_to_do(self) -> None:
         code, _, err = run_cli("report", "--target", str(self.target))
         self.assertEqual(code, 2)
-        self.assertIn("run `ai-toolkit check` first", err)
+        self.assertIn("run `skrillx check` first", err)
 
     def test_check_saves_the_card_and_report_renders_text_and_html(self) -> None:
         completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(CARD), stderr="")
@@ -231,8 +231,8 @@ class CompletionTests(unittest.TestCase):
         code, script, _ = run_cli("completion", "bash")
         self.assertEqual(code, 0)
         probe = script + (
-            'COMP_WORDS=(ai-toolkit rep); COMP_CWORD=1; _ai_toolkit; echo "${COMPREPLY[*]}"\n'
-            'COMP_WORDS=(ai-toolkit check --operation ""); COMP_CWORD=3; _ai_toolkit; echo "${COMPREPLY[*]}"\n'
+            'COMP_WORDS=(skrillx rep); COMP_CWORD=1; _skrillx; echo "${COMPREPLY[*]}"\n'
+            'COMP_WORDS=(skrillx check --operation ""); COMP_CWORD=3; _skrillx; echo "${COMPREPLY[*]}"\n'
         )
         completed = subprocess.run(["bash", "-c", probe], text=True, capture_output=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -249,7 +249,7 @@ class LauncherTests(unittest.TestCase):
             completed = subprocess.run(["bash", str(ROOT / "tooling" / "install-cli.sh"), "--prefix", str(prefix)],
                                        text=True, capture_output=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
-            link = prefix / "ai-toolkit"
+            link = prefix / "skrillx"
             self.assertTrue(link.is_file())
             self.assertIn("written by tooling/install-cli.sh", link.read_text(encoding="utf-8"))
             # Installing again replaces the managed wrapper instead of refusing.
@@ -258,7 +258,7 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             completed = subprocess.run([str(link), "--version"], cwd=directory, text=True, capture_output=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertIn("ai-toolkit", completed.stdout)
+            self.assertIn("skrillx", completed.stdout)
             completed = subprocess.run(["bash", str(ROOT / "tooling" / "install-cli.sh"), "--prefix", str(prefix), "--uninstall"],
                                        text=True, capture_output=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -267,11 +267,11 @@ class LauncherTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("bash"), "bash is not installed")
     def test_installer_refuses_to_replace_a_real_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            (Path(directory) / "ai-toolkit").write_text("mine", encoding="utf-8")
+            (Path(directory) / "skrillx").write_text("mine", encoding="utf-8")
             completed = subprocess.run(["bash", str(ROOT / "tooling" / "install-cli.sh"), "--prefix", directory],
                                        text=True, capture_output=True)
             self.assertEqual(completed.returncode, 1)
-            self.assertEqual((Path(directory) / "ai-toolkit").read_text(encoding="utf-8"), "mine")
+            self.assertEqual((Path(directory) / "skrillx").read_text(encoding="utf-8"), "mine")
 
 
 if __name__ == "__main__":

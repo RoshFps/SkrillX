@@ -1,4 +1,4 @@
-"""AI Software Toolkit command-line interface.
+"""SkrillX command-line interface.
 
 The CLI is a facade over the existing installer, diagnostics, scanner,
 configuration, and skill installer scripts. It adds discovery, the

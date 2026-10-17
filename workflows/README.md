@@ -224,7 +224,7 @@ and the check output.
 
 This repository runs the templates it ships from `.github/workflows/` with
 identical content, except those listed in `NOT_INSTALLED` in
-`tooling/sync_workflow_templates.py` (`ai-toolkit-setup.yml`,
+`tooling/sync_workflow_templates.py` (`skrillx-setup.yml`,
 `security-scanning.yml`, and `soak.yml`), which Dependabot does not see; the
 Python demo's installed workflows must also match. Every action uses one pin
 across all of them, including the excluded templates.
@@ -290,12 +290,12 @@ See [ruleset guidance](../rulesets/README.md) before adding contexts.
 
 ## Starter workflow
 
-`ai-toolkit-setup.yml` is not installed by the installer. Copy it into a
+`skrillx-setup.yml` is not installed by the installer. Copy it into a
 consuming repository's `.github/workflows/` and run it manually
-(`workflow_dispatch`). It downloads `ai-toolkit.pyz` from the pinned release
+(`workflow_dispatch`). It downloads `skrillx.pyz` from the pinned release
 tag you supply, verifies it against the SHA-256 you supply, runs
-`ai-toolkit init --preview` into the job summary, and, when `apply=true`,
-commits the installation to an `ai-toolkit/setup-<tag>` branch and opens a
+`skrillx init --preview` into the job summary, and, when `apply=true`,
+commits the installation to an `skrillx/setup-<tag>` branch and opens a
 pull request with `gh`. Discovered repository commands appear in the preview
 as `gh variable set` lines; the workflow never writes them into the tree.
 
