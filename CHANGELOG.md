@@ -103,7 +103,7 @@ or evidence contracts require a major release and migration guidance.
   settings. Verify the Docker-mounted Git repository before accepting Gitleaks
   evidence so an unavailable mount cannot produce a false passing scan.
 
-- Rename the GitHub repository to `ravisingh11/ai-software-toolkit` and update
+- Rename the GitHub repository to `RoshFps/SkrillX` and update
   clone, release, security reporting, and Pages links. Add a migration guide
   for existing clones, forks, workflows, and badges. Runtime contracts and
   existing release tags are unchanged.
