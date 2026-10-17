@@ -18,7 +18,7 @@ QA, release, and repository administration work.
 
 See [the delivery lifecycle and maturity map](../docs/vision.md). Choose a
 source revision or release containing the desired skill; newer QA additions
-are documented under [Unreleased](../CHANGELOG.md#unreleased), not in the
+are documented under [2.2.0](../CHANGELOG.md#220---2026-10-17), not in the
 v1.0.0 Proof demo. Installing a skill does not prove it has run.
 
 ## Policy
