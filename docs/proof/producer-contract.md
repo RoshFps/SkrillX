@@ -1,0 +1,337 @@
+# Provider and evidence contract
+
+The scorecard aggregates provider evidence. It is not a build, test runner,
+scanner, reviewer, or platform setting.
+
+## Nested v2 evidence
+
+Evidence groups provider results under the capability they support:
+
+```json
+{
+  "$schema": "./evidence.schema.json",
+  "version": 2,
+  "subject": {
+    "type": "git-commit",
+    "revision": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "results": {
+    "unit-tests": {
+      "repository-unit-tests": {
+        "producer": "Repository Unit Test Command",
+        "status": "passed",
+        "evidence": ["command: python3 -m unittest"]
+      }
+    },
+    "deep-sast": {
+      "github-codeql": {
+        "producer": "GitHub CodeQL",
+        "status": "not_run",
+        "reason": "GitHub profile is not selected"
+      }
+    }
+  }
+}
+```
+
+Subject types are `git-commit`, `pull-request`, `artifact`, and `environment`. The catalog
+declares which subject type each capability accepts.
+
+## Result requirements
+
+| Raw status | Required fields | Meaning |
+| --- | --- | --- |
+| `passed` | non-empty `evidence` list | Provider completed successfully for the exact subject. |
+| `failed` | non-empty `evidence` list | Provider completed and found a failure. |
+| `blocked` | non-empty `reason` | Provider could not complete. |
+| `not_run` | non-empty `reason` | No usable provider result exists. |
+
+Every result also requires a non-empty `producer`. Evidence records must not
+contain credentials or secret values.
+
+### Optional PR-size measurements
+
+The `change-scope.repository-change-scope` result may include `change_scope`
+with `version: 1`, aggregate `metrics`, and the four configured `thresholds`.
+This optional display metadata is accepted only for `passed` or `failed`
+results. Counts must be nonnegative integers, thresholds positive integers,
+totals consistent, and the status must match whether a threshold was exceeded.
+The schema defines the exact allowed numeric fields and bounds. No filenames
+or findings belong in this metadata.
+
+Evidence without this field remains valid. Refresh the evaluator, schema,
+collector, scope producer, and renderer together before emitting it; older
+runtimes reject unknown result fields. The GitHub collector retains the trusted
+producer status but omits unavailable or malformed optional measurements.
+The dashboard then displays measurements as unavailable. This extension does
+not change policy evaluation or promote scope from advisory to enforced.
+
+### Optional PR metadata detail
+
+The `pr-metadata.repository-pr-metadata` result may include `pr_metadata`
+with `version: 1`, a boolean `title_matches`, and the integer counts
+`required_sections` and `missing_sections` (0–20, missing never above
+required). It is accepted only for `passed` or `failed` results and on no
+other control or provider, and `passed` must equal "title matches and zero
+missing sections". The trusted base-branch `validate_pr_metadata.py` produces
+it, so it is not labeled self-reported. It never carries the title, body, or
+section names.
+
+The PR Metadata workflow copies the detail into its run-bound artifact. The
+GitHub collector attaches it after artifact provenance passes and omits a
+missing or malformed value without changing the proven status. The dashboard
+re-validates it and shows, for example, **Title matches the required format ·
+3 of 3 required sections present**; without it, the card states which detail
+was not reported. Refresh the evaluator, schema, validator, collector,
+renderer, and `pr-metadata.yml` together; older runtimes reject unknown result
+fields.
+
+### Optional self-reported test, coverage, validator, AI review, and scanner measurements
+
+A `unit-tests` result may include `measurements` with `version: 1`,
+`source: "pull-request-workflow"`, and `tests` (`total`, `passed`, `failed`,
+`skipped`). A `changed-code-coverage` result may include `measurements` with
+the same `version` and `source` and `coverage` (`measured_lines`,
+`covered_lines`, `threshold_percent`). Measurements are accepted only for
+`passed` or `failed` results and on no other control. Counts are nonnegative
+integers; `total` must equal the sum of its parts and be positive; covered
+lines cannot exceed measured lines; the threshold is 0–100. A `passed` result
+cannot report failed tests or coverage below its threshold.
+
+The repository validators report counts the same way, each on its own
+control:
+
+| Control | Kind | Fields | Consistency rules |
+| --- | --- | --- | --- |
+| `repository-validation` | `contracts` | `total`, `passed`, `failed`, `not_run` | `total` is positive and equals the sum; `passed` means no failed or not-run groups; `failed` needs a failed group |
+| `documentation-validation` | `documentation` | `markdown_files`, `links_checked`, `broken_links`, `mapping_failures` | Broken links cannot exceed links checked; `passed` exactly when there are no broken links or mapping failures |
+| `repository-ground-truth` | `documents` | `declared`, `found`, `missing` | `declared` equals `found + missing`; `passed` exactly when nothing is missing |
+| `migration-validation` | `migrations` | `checked`, `failed` | Failed cannot exceed checked; `passed` cannot report failures |
+| `ai-engineering-review`, `ai-qa-review`, `ai-security-review`, `ai-repository-standards-review` | `review_findings` | `total`, `p0`, `p1`, `p2`, `p3`, `unresolved_blocking` | `total` equals `p0 + p1 + p2 + p3`; `unresolved_blocking` cannot exceed `p0 + p1`; not coupled to status |
+| `custom-static-analysis`, `secret-detection`, `deep-sast`, `dependency-vulnerability` | `findings` | `total`, `critical`, `high`, `medium`, `low`, `unrated` | `total` equals the sum of the five buckets; no status rule |
+
+The installed repository validator runs its contract groups in order and stops
+at the first failure, so later groups count as `not_run`. The ground-truth
+validator counts documents declared in `.proof/ground-truth-ai.yaml` and checks
+only that each exists; it does not assess their contents. Migration
+Validation runs a repository-owned command, so its counts appear only when
+that command writes `migrations` to `PROOF_MEASUREMENTS_FILE`; zero checked
+means no migrations were found to check. This repository's
+`validate_no_migrations.py` counts each migration surface it finds as checked
+and failed, because the repository declares none. Build and Format and Lint
+report only their command's exit status. A validator that
+cannot read its own configuration writes no measurements. Document paths and
+link targets are never published.
+
+AI review finding counts come from the reviewer adapter's result file
+(`pr-review/pr-review.md`), counted by `.proof/measurements.py review-findings`
+in the same AI PR Review job: `p0` to `p3` count findings by `severity`, and
+`unresolved_blocking` counts `P0`/`P1` findings whose `status` is not
+`resolved` (a missing status counts as open), the same rule that makes a
+`pr-review` adapter exit non-zero. A finding with a severity or status outside the documented
+values makes the file uncountable, so no counts are packaged. The counts are
+not coupled to the check status: an adapter can fail without findings, and the
+per-role check reflects the adapter's exit status, not the blocking rule.
+They are the AI provider's judgment, never change a result, and leave AI
+review advisory-only. Only counts are published, never finding text,
+evidence, file paths, or rule names. A native GitHub review provider such as
+Codex Code Review posts findings as review comments and has no result file,
+so its card shows no counts and says where to read the review.
+
+Scanner `findings` are checked for arithmetic only. A scan can pass with
+findings below the tool's own threshold, and it can fail without a counted
+finding (for example, on an execution error), so no status rule would hold
+for every scanner. The Semgrep CE and Gitleaks workflows write their tool's
+JSON report outside the checkout, count it with `.proof/measurements.py
+semgrep` or `gitleaks`, and package only the counts; file paths, rule IDs,
+messages, commits, and secret values are never packaged, uploaded, or
+published. Severities map onto the buckets as follows:
+
+| Tool | `critical` | `high` | `medium` | `low` | `unrated` |
+| --- | --- | --- | --- | --- | --- |
+| Semgrep | `CRITICAL` | `ERROR`, `HIGH` | `WARNING`, `MEDIUM` | `INFO`, `LOW` | Any other value, such as `INVENTORY` or `EXPERIMENT` |
+| Gitleaks | — | — | — | — | Every finding; Gitleaks does not rate severity |
+| Snyk Code | — | SARIF `error` | SARIF `warning` | SARIF `note` | Any other level |
+| Snyk Open Source | `critical` | `high` | `medium` | `low` | Any other severity |
+| CodeQL (SARIF) | `security-severity` ≥ 9.0 | ≥ 7.0 | ≥ 4.0 | > 0; otherwise level `note` | Level `none`, or an unknown level |
+
+The Semgrep converter refuses a report that records a Semgrep error above
+`warn` or `info`, because the scan may be incomplete and its counts would
+understate findings; the dashboard then shows the counts as not collected.
+The scanners run from pinned containers with networking disabled, and the
+provider contract requires their workflow to match the trusted base, but the
+converter is the pull request's own `.proof/measurements.py`, so these counts
+are labeled self-reported like the other measurements. The CodeQL workflow
+writes its SARIF to the runner (`analyze` `output`) and counts it with
+`.proof/measurements.py sarif`: a result takes its rule's `security-severity`,
+resolved in the result's own tool component (the driver or the query-pack
+extension identified by index, or by GUID when the index is absent), using
+GitHub code scanning's bands. An unknown component GUID contributes no rule
+severity and falls back to the result level; a rule without a
+score falls back to the result level, then the rule's
+`defaultConfiguration.level`, then SARIF's `warning` default (`error` high,
+`warning` medium, `note` low). Results with a suppression in force (accepted,
+or no status) are not counted; rejected or under-review suppressions are.
+Counts are recorded only when the whole analysis succeeds, so a failed
+multi-language run never shows a partial total. The count covers every alert
+in the analysis, not only new ones. Finding
+counts are not collected for SonarQube (the
+SonarQube server holds them), GitHub Dependency Review (its job summary holds
+them), Semgrep App, or the FOSSA adapter; their dashboard cards say where to
+look instead.
+
+Snyk Code and Snyk Open Source counts come from the provider adapter, which the
+Snyk workflow runs from the default branch. `.proof/adapter.py --measurements
+PATH` writes `findings` from the JSON Snyk already prints, summing every
+lockfile it tested; Snyk Open Source counts one entry per
+vulnerable dependency path, as Snyk reports them. The workflow's
+`.proof/provider_check.py` validates the counts and puts them, with the
+`control` they describe, in the run-bound `proof-snyk-code-` or
+`proof-snyk-open-source-` evidence artifact; the collector keeps them only when
+that control is the check's single control. AI PR Review counts travel the
+same way.
+Counts are written only for a completed scan (`passed` or `failed`); a passed
+scan may report findings below a configured severity threshold. They use the
+same measurement contract and label as the other counts.
+
+These numbers come from the pull request's own workflow run, which executes
+the pull request's code, so they are **self-reported**. They are display
+metadata only: they never change a result's status, and the dashboard labels
+them as not independently verified. `tooling/proof_measurements.py`
+(installed as `.proof/measurements.py`) converts `python -m unittest` logs,
+JUnit XML, a `diff-cover` JSON report, a Semgrep JSON report, or a Gitleaks
+JSON report into this format and packages it.
+Tests that are skipped or marked as expected failures count as skipped,
+never as passed.
+
+The provider contract opts in with `measurements_artifact_prefix` and
+`measurements_member`, which require a `workflow_path` pull-request check and
+no `external_id_prefix`. The workflow sets `PROOF_MEASUREMENTS_FILE`; when the
+configured command writes that file, the workflow binds it to the run ID, run
+attempt, repository, head SHA, and control, and uploads the artifact
+`<prefix><run_id>-<run_attempt>`. The upload step is non-fatal, so an
+artifact-service failure never changes the check result. The GitHub collector
+attaches the measurements only after the check's own provenance passes, reads
+the attempt from the check's own job, and requires every binding to match, so a
+re-run never displays an earlier attempt's numbers. Missing,
+expired, duplicated, unbound, or inconsistent measurements are omitted
+without changing the check result, and the dashboard shows them as not
+collected.
+
+Adapters written by this toolkit start a `blocked` or `not_run` reason with a
+standard code followed by a colon: `configuration-missing`,
+`credential-missing`, `authentication-failed`, `execution-error`,
+`analysis-incomplete`, `revision-mismatch`, `unsupported-project`, or
+`timed-out`. The code is a prefix of `reason`, so the evidence schema is
+unchanged; reports use it to choose a next action. See the
+[reason code reference](../providers/README.md#reason-codes).
+
+## Provider selection
+
+`.proof/providers.yaml` defines each provider's capabilities, display name,
+activation category, check contracts, declared secrets, and template metadata.
+Its `selections` object assigns exactly one authoritative provider and zero or
+more supplemental providers to every runnable capability.
+
+A provider may use check-run contracts for some capabilities and review
+contracts for others. It must not declare both contract types for the same
+capability; configuration validation rejects that ambiguity before evidence is
+collected.
+
+Only the authoritative provider can satisfy or block a capability. Supplemental
+providers appear in the scorecard with `advisory: true` and never change the
+decision.
+
+## Local evidence
+
+`.proof/scan.py` resolves a clean full `HEAD` before local producers can
+pass. Repository commands run from `PROOF_WORKING_DIRECTORY`; absent
+commands report `not_run`. The scanner verifies the same clean revision before
+and after each configured command and local tool, so one producer cannot change
+the tree consumed by the next or publish passing evidence for a different tree.
+Semgrep CE and Gitleaks use pinned containers or exactly matching host versions.
+Before a Docker Gitleaks scan, the producer verifies that the container can
+read complete Git history at the same `HEAD` as the host. An inaccessible,
+shallow, or mismatched mount produces no usable evidence. A zero-commit scan
+cannot pass merely because the scanner exits successfully.
+
+External adapters may place `*.json` fragments in
+`.artifacts/proof/evidence/`. The scanner accepts only nested v2 fragments
+with the same subject. Different results for the same capability/provider pair
+are a contract error. The installed `.proof/adapter.py` writes such
+fragments for Snyk Code, Snyk Open Source, and FOSSA after running the
+adapter-owned command sequence for the exact `HEAD`.
+
+## GitHub evidence
+
+The GitHub collector derives expected checks from the selected capability and
+provider contracts. For each check it verifies:
+
+- exact `head_sha`;
+- the `github-actions` app;
+- a workflow run ID from the Actions details URL for native checks, or from the
+  contract-bound external ID for custom checks (GitHub may rewrite a custom
+  check's details URL to its check page);
+- the declared workflow name;
+- the declared workflow path when present, allowing GitHub's exact `@ref`
+  suffix;
+- a `pull_request` workflow event with an exact workflow-run head SHA, or a
+  `pull_request_target` proof with an exact artifact-bound head association;
+- matching workflow-run revision and check-suite identity for native Actions
+  checks; and
+- the declared external-ID prefix when the provider requires one.
+
+For a custom PR-head check published by a trusted `pull_request_target` probe,
+the external ID and details URL bind the custom check to the exact workflow run.
+The collector does not equate that custom check suite with the probe workflow's
+separate base-SHA suite.
+
+GitHub can return an empty `pull_requests` array for a valid `pull_request`
+workflow run. Native checks therefore bind through the event type, exact
+workflow-run head SHA, matching check-suite identity, and unchanged trusted
+paths. A non-empty association that names a different head is rejected.
+
+| GitHub conclusion | Raw evidence status |
+| --- | --- |
+| `success` | `passed` |
+| `failure` | `failed` |
+| `cancelled`, `timed_out`, `action_required`, `stale` | `blocked` |
+| `neutral`, `skipped`, missing, or incomplete | `not_run` |
+
+Unverifiable provenance is `not_run`. A check name alone is insufficient.
+
+GitHub review providers use a separate review contract. Proof accepts a
+completed review only when its `commit_id` equals the evaluated head SHA, its
+`user.login` exactly matches configured `review_author`, and GitHub identifies
+the account as a bot. The latest matching review is evidence that the review
+completed, not a guarantee that the reviewer found every defect. An approved or
+comment-only review reports `passed`; `CHANGES_REQUESTED` reports `failed`.
+Scorecard workflows refresh on review submission and dismissal, and cancel an
+older in-flight scorecard for the same pull request so stale review state cannot
+publish last.
+
+## Promotion contract
+
+Before selecting a provider as authoritative or setting its capability to
+`enforced`, verify its workflow/adapter, credentials and configuration,
+exact-subject binding, check name, failure behavior, and remediation owner. A
+credential or workflow file alone does not activate or pass the capability.
+Controls marked `advisory-only` in the catalog, including every AI review
+control, cannot be promoted to `enforced`.
+
+See [control setup](control-setup.md) and [status](control-status.md).
+
+### Check polling budget
+
+While waiting for GitHub checks, the collector polls only missing or pending
+check names. After a wait loop, it refreshes every name whose enumeration has
+not failed once before evaluating provenance. The final responses replace the
+cached results: late duplicates, disappearance, pending reruns, and API errors
+cannot inherit an earlier passing result. An enumeration failure remains
+unverified for that collection. Immediate snapshots perform no redundant
+refresh. Polling uses the existing deadline and attempt limit; the final
+refresh does not start another wait period.
+
+For fifteen checks with fourteen initially complete and one completing on its
+fifth poll, this uses 34 check-list requests instead of 75 when each response
+fits on one page. Provenance and pagination requests are additional.

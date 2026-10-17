@@ -1,7 +1,7 @@
-# SkrillX Skills
+# AI Software Toolkit Skills
 
-This directory is the canonical source for reusable agent skills in
-SkrillX. Skills are small, task-specific operating
+This directory is the canonical source for reusable agent skills in the
+AI Software Toolkit. Skills are small, task-specific operating
 guides that tell Codex how to perform repeatable engineering, security,
 QA, release, and repository administration work.
 
@@ -19,7 +19,7 @@ QA, release, and repository administration work.
 See [the delivery lifecycle and maturity map](../docs/vision.md). Choose a
 source revision or release containing the desired skill; newer QA additions
 are documented under [Unreleased](../CHANGELOG.md#unreleased), not in the
-v1.0.0 Guardrails demo. Installing a skill does not prove it has run.
+v1.0.0 Proof demo. Installing a skill does not prove it has run.
 
 ## Policy
 
@@ -42,7 +42,12 @@ From the repository root:
 tooling/install-skills.sh --list
 tooling/install-skills.sh --all --dry-run
 tooling/install-skills.sh --all --merge-existing
+tooling/install-skills.sh --all --client claude-code   # ~/.claude/skills instead of ~/.codex/skills
 ```
+
+One canonical source serves both clients: the `SKILL.md` frontmatter (`name`,
+`description`) is what Claude Code reads, and `agents/openai.yaml` carries the
+Codex interface. `--client` only changes the default destination.
 
 The [`skrillx` CLI](../docs/install.md) installs the same canonical skills
 for Codex (`.agents/skills`) and Claude Code (`.claude/skills`) without
@@ -62,13 +67,22 @@ Install behavior:
 
 ## Skill Catalog
 
-The requested starter set is the Phase 2 foundation:
+### Action skills
 
-- `dependency-upgrade`
-- `generate-unit-tests`
-- `fix-ci`
-- `fix-security-finding`
-- `address-pr-findings`
+These five skills change code and prove the change. Each defines its inputs,
+permitted changes, stop conditions, verification, and outcome report, ships a
+seeded fixture under `tooling/tests/fixtures/skills/<name>/`, and keeps a
+`VERIFICATION.md` ledger with one row per supported client (Codex, Claude
+Code). A skill is verified only when a live run is recorded there;
+`tooling/validate-skills.py` requires both rows. `skrillx check` names the
+applicable action skill for each failed capability; running it is a separate,
+explicit step.
+
+- `fix-ci` — make a red check green by fixing the cause, never by weakening the check.
+- `generate-unit-tests` — write behavior-protecting tests for changed or untested code.
+- `fix-security-finding` — confirm, remediate, and regression-test one security finding.
+- `dependency-upgrade` — move one dependency forward with compatibility proof and rollback notes.
+- `address-pr-findings` — resolve or decide every review finding with verification.
 
 The additional skills below are optional shared capabilities. They remain in
 this repository because they are reusable, but application repositories should
@@ -98,7 +112,7 @@ install only the skills they actually need.
 
 ### Repository Operations
 
-- `change-guardrail-control`
+- `change-proof-control`
 - `commit-message-enforcer`
 - `dependency-remediation`
 - `github-actions-hardening`
@@ -114,8 +128,9 @@ install only the skills they actually need.
 
 ## Which Skill To Use
 
+- Use `prepare-safe-change` before editing a consumer repository: the Proof installer places it under `.agents/skills/` so agents read the repository's ground truth and validation contract first.
 - Use `repo-bootstrap` for a new or newly adopted repo.
-- Use `change-guardrail-control` whenever a capability, provider, producer,
+- Use `change-proof-control` whenever a capability, provider, producer,
   evidence contract, activation setting, or enforcement mode changes.
 - Use `repo-admin-hygiene` for descriptions, homepages, topics, labels, default branches, Wikis, Projects, and GitHub metadata.
 - Use `license-compliance` for root `LICENSE` files and first-party package metadata.
@@ -133,6 +148,10 @@ install only the skills they actually need.
 - Use `qa-bootstrap` to set up agent-driven functional QA in a product repo: a
   `qa` orchestrator, per-app `qa-<app>` flow menus, and optional GitHub Actions
   workflows with a read-only advisory QA check and trusted sticky-comment reporting.
+- Use `fix-ci`, `generate-unit-tests`, `fix-security-finding`,
+  `dependency-upgrade`, or `address-pr-findings` when a check, coverage gap,
+  scanner finding, advisory, or review has named the work to do; they act and
+  verify, where the review skills only report.
 - Use `skill-installer` to install or refresh canonical skills locally.
 - Use `toolkit-setup` to install, diagnose, or refresh the whole toolkit
   through the shared `skrillx` CLI; it runs the same discovery and

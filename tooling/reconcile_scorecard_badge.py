@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Guardrails v2 installer-owned runtime.
+# Proof installer-owned runtime.
 """Reconcile and render the newest trustworthy PR scorecard for GitHub Pages."""
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from http.client import HTTPException
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Iterator
 from urllib.error import HTTPError, URLError
@@ -21,8 +22,8 @@ from urllib.parse import quote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 
-WORKFLOW_NAME = "Guardrail Scorecard"
-WORKFLOW_FILE = ".github/workflows/guardrails-scorecard.yml"
+WORKFLOW_NAME = "Proof Scorecard"
+WORKFLOW_FILE = ".github/workflows/proof-scorecard.yml"
 VALID_EVENTS = {"pull_request_target", "pull_request_review"}
 VALID_CONCLUSIONS = {"success", "failure"}
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
@@ -410,6 +411,7 @@ def download_artifact(
         redirect_opener.open(request, timeout=20)
     except HTTPError as error:
         if error.code != 302:
+            describe_http_failure(error, "artifact redirect")
             raise
         location = error.headers.get("Location")
     else:
@@ -425,8 +427,12 @@ def download_artifact(
             "artifact redirect must be an absolute credential-free HTTPS URL"
         )
     unsigned_request = Request(location, headers={"Accept": "application/octet-stream"})
-    with unsigned_open(unsigned_request, timeout=20) as response:
-        content = response.read(MAX_ARCHIVE_BYTES + 1)
+    try:
+        with unsigned_open(unsigned_request, timeout=20) as response:
+            content = response.read(MAX_ARCHIVE_BYTES + 1)
+    except HTTPError as error:
+        describe_http_failure(error, "artifact download")
+        raise
     if len(content) > MAX_ARCHIVE_BYTES:
         raise ArtifactRejected("artifact archive exceeds the compressed size limit")
     return content
@@ -444,7 +450,7 @@ def exact_artifact(listing: dict[str, Any], run: dict[str, Any]) -> dict[str, An
         or any(not isinstance(item, dict) for item in artifacts)
     ):
         raise APIResponseError("artifact listing is incomplete or malformed")
-    expected = f"guardrail-scorecard-{run['id']}-{run['run_attempt']}"
+    expected = f"proof-scorecard-{run['id']}-{run['run_attempt']}"
     matching = [
         item
         for item in artifacts
@@ -462,6 +468,8 @@ def select_candidate(
     runs: Iterable[dict[str, Any]],
     current: tuple[str, int, int] | None,
     validate: Callable[[dict[str, Any]], dict[str, Any]],
+    *,
+    allow_fallback: bool = True,
 ) -> tuple[dict[str, Any], list[str]]:
     rejected: list[str] = []
     reached_older = False
@@ -477,6 +485,8 @@ def select_candidate(
         try:
             return validate(candidate), rejected
         except CandidateRejected as error:
+            if not allow_fallback:
+                raise ValueError(f"private Pages cannot fall back to older evidence; newest candidate rejected: {error}") from error
             rejected.append(
                 f"run {candidate.get('id')} attempt {candidate.get('run_attempt')}: {error}"
             )
@@ -485,6 +495,50 @@ def select_candidate(
             "no valid candidate is as new as the published scorecard"
         )
     raise ValueError("no valid completed scorecard candidate was found")
+
+
+def github_request_context(url: str) -> str:
+    """Name known operations without exposing repository names, query strings or signed URLs."""
+    path = urlparse(url).path
+    routes = (
+        (r"/repos/[^/]+/[^/]+", "repository metadata"),
+        (r"/repos/[^/]+/[^/]+/pages", "Pages configuration"),
+        (r"/repos/[^/]+/[^/]+/actions/workflows/[^/]+/runs", "completed scorecard runs"),
+        (r"/repos/[^/]+/[^/]+/actions/runs/[^/]+/artifacts", "run artifact listing"),
+        (r"/repos/[^/]+/[^/]+/actions/artifacts/[^/]+/zip", "artifact redirect"),
+        (r"/repos/[^/]+/[^/]+/pulls/[^/]+", "pull request metadata"),
+    )
+    return next((label for pattern, label in routes if re.fullmatch(pattern, path)), "GitHub API request")
+
+
+def describe_http_failure(error: HTTPError, context: str) -> None:
+    """Replace unsafe server prose with bounded diagnostics, retaining the same HTTPError and status."""
+    headers = {name.lower(): str(value) for name, value in (error.headers or {}).items()}
+    details = []
+    for name in ("x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-used", "x-ratelimit-reset", "retry-after"):
+        value = headers.get(name, "")
+        if re.fullmatch(r"[0-9]{1,20}", value):
+            details.append(f"{name}={value}")
+    request_id = headers.get("x-github-request-id", "")
+    if re.fullmatch(r"[A-Za-z0-9:-]{1,128}", request_id):
+        details.append(f"request-id={request_id}")
+    message = ""
+    try:
+        body = json.loads(error.read(4096))
+        if isinstance(body, dict) and isinstance(body.get("message"), str):
+            message = body["message"].lower()
+    except (OSError, ValueError, TypeError, UnicodeError, HTTPException, RecursionError):
+        pass
+    classification = {401: "authentication-failed", 403: "forbidden-unknown", 404: "not-found",
+                      429: "rate-limit-unspecified"}.get(error.code, "http-failure")
+    if error.code in {403, 429}:
+        if headers.get("x-ratelimit-remaining") == "0":
+            classification = "primary-rate-limit"
+        elif "secondary rate limit" in message:
+            classification = "secondary-rate-limit"
+        elif message in {"resource not accessible by integration", "resource not accessible by personal access token"}:
+            classification = "permission-denied"
+    error.msg = "; ".join([context, classification, *details])
 
 
 class GitHubClient:
@@ -505,8 +559,12 @@ class GitHubClient:
                 "X-GitHub-Api-Version": "2022-11-28",
             },
         )
-        with urlopen(request, timeout=20) as response:
-            return json.load(response)
+        try:
+            with urlopen(request, timeout=20) as response:
+                return json.load(response)
+        except HTTPError as error:
+            describe_http_failure(error, github_request_context(url))
+            raise
 
     def artifact(self, repository: str, artifact_id: int) -> bytes:
         return download_artifact(
@@ -516,7 +574,7 @@ class GitHubClient:
 
 
 def completed_runs(client: GitHubClient, repository: str) -> Iterator[dict[str, Any]]:
-    encoded_workflow = quote("guardrails-scorecard.yml", safe="")
+    encoded_workflow = quote("proof-scorecard.yml", safe="")
     for page in range(1, MAX_RUN_PAGES + 1):
         payload = client.json(
             f"https://api.github.com/repos/{repository}/actions/workflows/{encoded_workflow}/runs"
@@ -544,6 +602,7 @@ def read_published_scorecard(url: str) -> dict[str, Any] | None:
     except HTTPError as error:
         if error.code == 404:
             return None
+        describe_http_failure(error, "published scorecard download")
         raise
     if not isinstance(value, dict):
         raise ValueError("published scorecard response must be an object")
@@ -580,6 +639,36 @@ def _write_output(path: Path, values: dict[str, str]) -> None:
             stream.write(f"{key}={value}\n")
 
 
+def publication_destination(
+    repository: str, record: dict[str, Any], access: str, client: GitHubClient
+) -> tuple[str, bool]:
+    """Fail closed before reading evidence or rendering a nonpublic repository."""
+    visibility = record.get("visibility")
+    if not isinstance(visibility, str) or visibility not in {"public", "private", "internal"}:
+        raise ValueError("repository visibility is unknown; keep reports in Actions")
+    if access not in {"", "public", "private"}:
+        raise ValueError("Pages access must be public or private")
+    if visibility != "public" and access != "private":
+        raise ValueError(
+            "nonpublic repositories require PAGES_ACCESS=private and a private Pages site; "
+            "keep reports in Actions until configured"
+        )
+    if access != "private":
+        return pages_base_url(repository), False
+    pages = client.json(f"https://api.github.com/repos/{repository}/pages")
+    if not isinstance(pages, dict) or pages.get("public") is not False:
+        raise ValueError("Pages is not verified private; refusing publication")
+    url = pages.get("html_url")
+    parsed = urlparse(url) if isinstance(url, str) else None
+    if (
+        parsed is None or parsed.scheme != "https" or not parsed.hostname
+        or parsed.username or parsed.password or parsed.query or parsed.fragment
+        or any(character.isspace() for character in url)
+    ):
+        raise ValueError("private Pages URL is invalid")
+    return url.rstrip("/") + "/", True
+
+
 def reconcile(
     repository: str,
     token: str,
@@ -587,6 +676,7 @@ def reconcile(
     renderer: Path,
     output_dir: Path,
     *,
+    pages_access: str = "",
     client: GitHubClient | None = None,
     published_loader: Callable[[str], dict[str, Any] | None] = read_published_scorecard,
 ) -> tuple[dict[str, Any] | None, list[str], bool]:
@@ -598,8 +688,10 @@ def reconcile(
     ):
         raise ValueError("repository API response does not identify a default branch")
     default_branch = repo_record["default_branch"]
-    base_url = pages_base_url(repository)
-    published = validate_published_scorecard(
+    base_url, private_pages = publication_destination(repository, repo_record, pages_access, client)
+    # Private Pages requires interactive authentication. Never send the API token
+    # to a Pages host or probe the public github.io fallback for private reports.
+    published = None if private_pages else validate_published_scorecard(
         published_loader(f"{base_url}scorecard.json"), repository
     )
     current = published_tuple(published)
@@ -634,7 +726,7 @@ def reconcile(
             raise
         except ArtifactRejected as error:
             raise CandidateRejected(str(error)) from error
-        with tempfile.TemporaryDirectory(prefix="guardrails-scorecard-") as directory:
+        with tempfile.TemporaryDirectory(prefix="proof-scorecard-") as directory:
             root = Path(directory)
             extracted = candidate_value(
                 lambda: extract_artifact(payload, root / "artifact")
@@ -759,7 +851,7 @@ def reconcile(
             }
 
     try:
-        selected, rejected = select_candidate(runs, current, validate)
+        selected, rejected = select_candidate(runs, current, validate, allow_fallback=not private_pages)
     except StalePublication as error:
         return None, [str(error)], False
     candidate_tuple = run_tuple(selected["run"])
@@ -773,9 +865,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--token", default=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     )
+    parser.add_argument("--pages-access", default=os.environ.get("PROOF_SCORECARD_BADGE_PAGES_ACCESS", ""))
     parser.add_argument("--repository-root", type=Path, default=Path("."))
     parser.add_argument(
-        "--renderer", type=Path, default=Path(".guardrails/render_scorecard_badge.py")
+        "--renderer", type=Path, default=Path(".proof/render_scorecard_badge.py")
     )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--github-output", required=True, type=Path)
@@ -794,6 +887,7 @@ def main() -> int:
             args.repository_root.resolve(),
             args.renderer.resolve(),
             args.output_dir.resolve(),
+            pages_access=args.pages_access,
         )
         values = {"publish": "true" if publish else "false"}
         lines = ["## Latest PR scorecard reconciliation", ""]

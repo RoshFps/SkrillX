@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions to SkrillX should help development, QA, security,
+Contributions to AI Software Toolkit should help development, QA, security,
 and release teams perform reusable work and verify the results. Keep the
 distinction between policy, implemented capabilities, and aspiration clear.
 See [the vision and maturity map](docs/vision.md).
@@ -10,7 +10,7 @@ See [the vision and maturity map](docs/vision.md).
 - `policies/` defines organization requirements and the control catalog.
 - `pr-review/` defines what AI reviews.
 - `workflows/` defines how checks execute.
-- `guardrails/` defines evidence schemas and deterministic evaluation.
+- `proof/` defines evidence schemas and deterministic evaluation.
 - `rulesets/` defines GitHub enforcement templates.
 - `skills/`, `prompts/`, and `templates/` provide reusable agent capabilities.
 - `tooling/` contains deterministic installers and validators.
@@ -20,7 +20,7 @@ Keep application-specific architecture, commands, customer data, credentials,
 private repository inventories, and product-specific rules in the application
 repository that owns them.
 
-## Guardrail inclusion test
+## Proof inclusion test
 
 An enforced control needs all of the following:
 
@@ -60,14 +60,14 @@ The [documentation index](docs/README.md) maps the source directories and
 installed copies. Keep transient agent reports in ignored local directories;
 retain only useful design decisions in the [archive](docs/archive/README.md).
 
-Use [the repository self-check](docs/self-check.md) to produce a local Guardrails
+Use [the repository self-check](docs/self-check.md) to produce a local Proof
 scorecard from a clean commit. The complete validation commands below also work
 while editing; their output alone is not revision-bound scan evidence.
 
 ```sh
 python3 -m pip install --disable-pip-version-check -r tooling/requirements-ci.txt
 tooling/build.sh
-GUARDRAILS_COVERAGE_BASE_REF=origin/main tooling/changed_code_coverage.sh
+PROOF_COVERAGE_BASE_REF=origin/main tooling/changed_code_coverage.sh
 python3 tooling/validators/validate_repository.py
 python3 tooling/validators/validate_documentation.py
 python3 tooling/validate-skills.py
@@ -90,7 +90,29 @@ Before a toolkit release:
 2. Review workflow permissions, pinned action references, and provider secrets.
 3. Refresh and validate the embedded Python example.
 4. Run a real pull request and inspect the scorecard artifact and PR comment.
-5. Record any provider that remains advisory or not activated.
+5. Record any provider that remains advisory or not activated, and check the
+   [provider verification ledger](docs/providers/verification.md) and each
+   action skill's `VERIFICATION.md` before describing anything as verified.
+6. Build the release assets: `python3 tooling/build_archive.py` for
+   `skrillx.pyz` and its checksum, and `tooling/package-speckit-preset.sh`
+   for the Spec Kit preset archive.
 
 Keep release claims tied to observed evidence. A catalog entry or workflow file
 is not proof that a provider is active.
+
+### Tooling internals
+
+The CLI entry point is `tooling/ai_toolkit/__main__.py`; `cli.py` routes commands,
+`config.py` reads the consumer configuration, `discovery.py` discovers repository
+inputs, `report.py` formats results, `runtime.py` locates the source tree and installed runtime,
+and `skills.py` installs client skill copies. These modules live together under
+`tooling/ai_toolkit/`.
+
+`tooling/coverage-support/sitecustomize.py` supports coverage collection in child
+Python processes. Under `tooling/validators/`, `inspect_change_scope.py` classifies
+changed paths for validation and `validate_ground_truth.py` validates the
+consumer's ground-truth document mapping. Tests and fixtures are excluded from
+shipped-script documentation coverage; historical `docs/archive/` mentions do
+not satisfy current documentation coverage. Duplicate script basenames require
+repository-relative paths in current documentation. `tooling/doctor.py` inspects
+consumer configuration and installed runtime readiness.

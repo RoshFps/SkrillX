@@ -16,7 +16,7 @@ SPEC.loader.exec_module(MODULE)
 def payload(**overrides) -> dict:
     pull_request = {
         "number": 42,
-        "title": "ENG-123 Add migration guardrail",
+        "title": "ENG-123 Add migration proof",
         "body": "## Summary\nSafe migration.\n\n## Testing\nValidated.",
         "updated_at": "2026-08-31T12:00:00Z",
         "head": {"sha": "abc123"},
@@ -55,6 +55,30 @@ class PullRequestMetadataTests(unittest.TestCase):
 
         self.assertEqual(failed["status"], "failed")
         self.assertEqual(len(failed["evidence"]), 2)
+
+    def test_detail_reports_counts_without_pull_request_text(self) -> None:
+        config = {
+            "version": 2,
+            "title_pattern": r"^ENG-[0-9]+ ",
+            "required_body_markers": ["## Summary", "## Testing", "## Rollback"],
+        }
+
+        passed = MODULE.validate_metadata(
+            payload(body="## Summary\n## Testing\n## Rollback"), config
+        )
+        failed = MODULE.validate_metadata(payload(title="Add feature"), config)
+
+        self.assertEqual(
+            passed["pr_metadata"],
+            {"version": 1, "title_matches": True, "required_sections": 3, "missing_sections": 0},
+        )
+        self.assertEqual(
+            failed["pr_metadata"],
+            {"version": 1, "title_matches": False, "required_sections": 3, "missing_sections": 1},
+        )
+        serialized = json.dumps(failed["pr_metadata"])
+        for private in ("Add feature", "Summary", "Rollback", "migration"):
+            self.assertNotIn(private, serialized)
 
     def test_write_evidence_uses_pull_request_subject(self) -> None:
         event = payload()

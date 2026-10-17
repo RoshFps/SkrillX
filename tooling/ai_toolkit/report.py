@@ -35,8 +35,30 @@ REVIEW_SKILLS = {
 }
 
 
+# Standard reason codes emitted by adapters (see tooling/provider_adapter.py REASON_CODES).
+REASON_ACTIONS = {
+    "configuration-missing": "Install the provider CLI or configuration named in the reason, then rerun.",
+    "credential-missing": "Add the provider credential as a secret of the proof-providers environment (or export it locally), then rerun.",
+    "credential-withheld": "Fork pull requests are not sent to the provider; set PROOF_PROVIDERS_SCAN_FORKS=true to scan them.",
+    "authentication-failed": "Rotate or fix the provider credential; the current one was rejected.",
+    "execution-error": "Open the provider run log; the command failed before producing a result.",
+    "analysis-incomplete": "The provider did not finish evaluating this revision; rerun once its analysis completes or raise the timeout.",
+    "revision-mismatch": "The evidence is for a different revision; rerun the provider on the exact HEAD.",
+    "unsupported-project": "The provider found nothing to analyze; confirm the working directory and manifests, or deselect the provider.",
+    "timed-out": "The provider exceeded the adapter timeout; rerun or raise --timeout.",
+    "requires-dependency-resolution": "Resolving these dependencies needs a build tool; commit a supported lockfile, exclude the manifest, or select another provider.",
+}
+
+
+def reason_code(reason: str | None) -> str | None:
+    if not isinstance(reason, str):
+        return None
+    head = reason.split(":", 1)[0].strip()
+    return head if head in REASON_ACTIONS else None
+
+
 def latest_evidence(target: Path) -> dict[str, Any] | None:
-    path = target / ".artifacts" / "guardrails" / "evidence.json"
+    path = target / ".artifacts" / "proof" / "evidence.json"
     if not path.is_file():
         return None
     try:
@@ -84,6 +106,11 @@ def next_action(row: dict[str, Any]) -> str:
         if skill:
             return f"Run the `{skill}` skill with this finding attached (review skills today: {REVIEW_SKILLS.get(skill, skill)})."
         return f"Investigate the {provider} result and fix the underlying problem."
+    code = reason_code(reason)
+    if code:
+        action = REASON_ACTIONS[code]
+        detail = reason.split(":", 1)[1].strip() if ":" in reason else ""
+        return f"[{code}] {action}" + (f" ({detail})" if detail else "")
     if status == "blocked":
         return f"{provider} could not complete: {reason or 'see the evidence'}. Resolve the blocker and rerun."
     if status in {"not_run", "no_result", "missing"}:
@@ -150,7 +177,7 @@ def render_check(card: dict[str, Any], *, evidence_path: str | None = None, repo
 
 def authoritative_selections(target: Path) -> dict[str, str]:
     """Capability -> authoritative provider id from the installed provider configuration."""
-    path = target / ".guardrails" / "providers.yaml"
+    path = target / ".proof" / "providers.yaml"
     if not path.is_file():
         return {}
     try:
@@ -205,7 +232,7 @@ def verified_rows(target: Path, doctor_report: dict[str, Any]) -> list[dict[str,
             gap = command or workflow or {}
             action = gap.get("next_step", "Configure the capability's command, credential, or workflow.")
         else:
-            action = "Run `skrillx init` to install the Guardrails runtime."
+            action = "Run `skrillx init` to install the Proof runtime."
         rows.append({"capability": capability, "state": state, "observed": observed, "next_step": action})
     return rows
 
@@ -234,7 +261,7 @@ def render_doctor(target: Path, doctor_report: dict[str, Any], rows: list[dict[s
     lines.append("")
     lines.append(" | ".join(f"{state}: {count}" for state, count in counts.items()))
     lines.append("")
-    lines.append("Guardrails diagnostics:")
+    lines.append("Proof diagnostics:")
     for row in doctor_report.get("checks", []):
         lines.append(f"  [{row['status'].upper()}] {row['id']}: {row['message']}")
     return "\n".join(lines) + "\n"

@@ -102,7 +102,7 @@ class ControlCatalogPolicyTests(unittest.TestCase):
                     self.validator("validate_control_catalog_document")(catalog)
 
     def test_catalog_string_boundaries_match_schema(self) -> None:
-        schema = load("guardrails/control-catalog.schema.json")
+        schema = load("proof/control-catalog.schema.json")
         properties = schema["$defs"]["control"]["properties"]
 
         for field in ("name", "purpose"):
@@ -121,22 +121,22 @@ class ControlCatalogPolicyTests(unittest.TestCase):
 
     def test_schema_nonempty_strings_match_handwritten_nonblank_rule(self) -> None:
         constrained_fields = {
-            "guardrails/control-catalog.schema.json": (
+            "proof/control-catalog.schema.json": (
                 ("control", "name"),
                 ("control", "purpose"),
             ),
-            "guardrails/profiles.schema.json": (
+            "proof/profiles.schema.json": (
                 ("profile", "display_name"),
                 ("profile", "description"),
             ),
-            "guardrails/providers.schema.json": (
+            "proof/providers.schema.json": (
                 ("provider", "display_name"),
                 ("check", "check_name"),
                 ("check", "workflow"),
                 ("provider", "template"),
             ),
-            "guardrails/policy.schema.json": ((None, "name"),),
-            "guardrails/evidence.schema.json": (
+            "proof/policy.schema.json": ((None, "name"),),
+            "proof/evidence.schema.json": (
                 (None, "subject.revision"),
                 ("result", "producer"),
                 ("result", "reason"),
@@ -170,6 +170,21 @@ class ControlCatalogPolicyTests(unittest.TestCase):
         check["trusted_paths"] = [{"not": "a path"}]
         with self.assertRaisesRegex(ValueError, "trusted_paths"):
             self.validator("validate_provider_document")(providers, catalog)
+
+    def test_handwritten_validator_matches_measurement_field_limits(self) -> None:
+        catalog = {control["id"]: control for control in load("policies/control-catalog.yaml")["controls"]}
+        validate = self.validator("validate_provider_document")
+        for prefix, member, valid in (("p" * 150, "m.json", True), ("p" * 151, "m.json", False),
+                                      ("p-", "m" * 100, True), ("p-", "m" * 101, False), ("bad prefix", "m.json", False)):
+            with self.subTest(prefix=len(prefix), member=len(member), valid=valid):
+                providers = load("policies/provider-config.yaml")
+                check = providers["providers"]["repository-unit-tests"]["checks"]["unit-tests"]
+                check.update(measurements_artifact_prefix=prefix, measurements_member=member)
+                if valid:
+                    validate(providers, catalog)
+                else:
+                    with self.assertRaisesRegex(ValueError, "measurements"):
+                        validate(providers, catalog)
 
     def test_profile_defaults_are_exact_and_advisory(self) -> None:
         profiles = load("policies/profiles.yaml")
@@ -234,11 +249,11 @@ class ControlCatalogPolicyTests(unittest.TestCase):
 
     def test_contract_schemas_are_v2_json_schema_2020_12(self) -> None:
         for relative_path in (
-            "guardrails/control-catalog.schema.json",
-            "guardrails/profiles.schema.json",
-            "guardrails/providers.schema.json",
-            "guardrails/policy.schema.json",
-            "guardrails/evidence.schema.json",
+            "proof/control-catalog.schema.json",
+            "proof/profiles.schema.json",
+            "proof/providers.schema.json",
+            "proof/policy.schema.json",
+            "proof/evidence.schema.json",
         ):
             with self.subTest(path=relative_path):
                 path = ROOT / relative_path
@@ -248,7 +263,7 @@ class ControlCatalogPolicyTests(unittest.TestCase):
                 self.assertEqual(schema["properties"]["version"]["const"], 2)
 
     def test_baseline_selects_only_core_with_empty_overrides(self) -> None:
-        baseline = load("guardrails/baseline.yaml")
+        baseline = load("proof/baseline.yaml")
 
         self.assertEqual(
             baseline,

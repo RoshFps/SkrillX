@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect nested Guardrails v2 evidence from GitHub checks and PR reviews."""
+"""Collect nested Proof evidence from GitHub checks and PR reviews."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ CHECK_RUNS_PER_PAGE = 100
 MAX_CHECK_RUN_PAGES = 10
 PULL_REQUEST_REVIEWS_PER_PAGE = 100
 MAX_PULL_REQUEST_REVIEW_PAGES = 10
-ARTIFACT_STATUSES = {"passed", "failed", "not_run"}
+ARTIFACT_STATUSES = {"passed", "failed", "blocked", "not_run"}
 
 
 class NoRedirectHandler(HTTPRedirectHandler):
@@ -71,10 +71,10 @@ def bounded_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def evaluator_module() -> Any:
-    path = ROOT / "guardrails" / "evaluate.py"
+    path = ROOT / "proof" / "evaluate.py"
     if not path.exists():
-        path = ROOT / ".guardrails" / "evaluate.py"
-    spec = importlib.util.spec_from_file_location("guardrails_v2_evaluator", path)
+        path = ROOT / ".proof" / "evaluate.py"
+    spec = importlib.util.spec_from_file_location("proof_v2_evaluator", path)
     if not spec or not spec.loader:
         raise ValueError(f"cannot load evaluator: {path}")
     module = importlib.util.module_from_spec(spec)
@@ -103,7 +103,32 @@ def check_run_evidence(control_id: str, provider_name: str, check: dict[str, Any
         result["reason"] = f"GitHub check concluded {conclusion}; the provider did not return a passing result."
         if check.get("name"):
             result["evidence"] = [f"{check['name']}: {conclusion}; {url}"]
+    execution = check_execution(check, status)
+    if execution is not None:
+        result["check_execution"] = execution
     return bounded_result(result)
+
+
+def check_execution(check: dict[str, Any], status: str) -> dict[str, Any] | None:
+    """Optional check timing for display; never changes the check's evidence status."""
+    conclusion = check.get("conclusion")
+    if check.get("status") != "completed" or conclusion not in CONCLUSIONS:
+        return None
+    evaluator = evaluator_module()
+    try:
+        started = evaluator.check_timestamp(check.get("started_at"))
+        completed = evaluator.check_timestamp(check.get("completed_at"))
+        execution = {
+            "version": 1,
+            "started_at": check["started_at"],
+            "completed_at": check["completed_at"],
+            "duration_seconds": int((completed - started).total_seconds()),
+            "conclusion": conclusion,
+        }
+        evaluator.validate_check_execution(execution, status)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return execution
 
 
 def _request(url: str, token: str) -> Any:
@@ -173,6 +198,9 @@ def expected_checks(
                     contract["artifact_name_prefix"] = check["artifact_name_prefix"]
                 if "artifact_member" in check:
                     contract["artifact_member"] = check["artifact_member"]
+                for field in ("measurements_artifact_prefix", "measurements_member"):
+                    if field in check:
+                        contract[field] = check[field]
                 existing = expected.get(check_name)
                 if existing is not None and (
                     existing["provider_id"] != provider_id
@@ -183,6 +211,8 @@ def expected_checks(
                     or existing.get("app_slug") != check.get("app_slug")
                     or existing.get("artifact_name_prefix") != check.get("artifact_name_prefix")
                     or existing.get("artifact_member") != check.get("artifact_member")
+                    or existing.get("measurements_artifact_prefix") != check.get("measurements_artifact_prefix")
+                    or existing.get("measurements_member") != check.get("measurements_member")
                 ):
                     raise ValueError(
                         f"ambiguous check name {check_name!r} is reused by different workflow/provider contracts"
@@ -476,17 +506,132 @@ def run_artifact_evidence(
         return not_run(check_name, "The evidence artifact summary is invalid.")
     url = check.get("details_url") or "unavailable"
     if status in {"passed", "failed"}:
-        return bounded_result({
+        result = {
             "producer": provider_name,
             "status": status,
             "evidence": [f"{summary}; {url}"],
-        })
+        }
+        if provider_id == "repository-change-scope":
+            scope = {
+                "version": 1,
+                "metrics": document.get("metrics"),
+                "thresholds": document.get("thresholds"),
+            }
+            try:
+                evaluator_module().validate_change_scope(scope, status)
+            except ValueError:
+                # Older or malformed optional measurements are unavailable;
+                # the independently verified producer status is unchanged.
+                pass
+            else:
+                result["change_scope"] = scope
+        elif provider_id == "repository-pr-metadata" and "pr_metadata" in document:
+            detail = document["pr_metadata"]
+            try:
+                evaluator_module().validate_pr_metadata(detail, status)
+            except ValueError:
+                pass  # Same rule as change_scope: omit malformed detail, keep the proven status.
+            else:
+                result["pr_metadata"] = detail
+        execution = check_execution(check, status)
+        if execution is not None:
+            result["check_execution"] = execution
+        control_ids = contract.get("control_ids") or []
+        if "measurements" in document and len(control_ids) == 1 and document.get("control") == control_ids[0]:
+            try:
+                evaluator_module().validate_measurements(control_ids[0], document["measurements"], status)
+            except (ValueError, TypeError, KeyError):
+                pass  # Optional display metadata: omit malformed counts, keep the proven status.
+            else:
+                result["measurements"] = document["measurements"]
+        return bounded_result(result)
     return bounded_result({
         "producer": provider_name,
-        "status": "not_run",
+        "status": status,
         "reason": summary,
         "evidence": [f"{check_name}: run-bound artifact; {url}"],
     })
+
+
+def self_reported_measurements(
+    repo: str,
+    revision: str,
+    token: str,
+    run_id: int,
+    contract: dict[str, Any],
+    control_id: str,
+    status: str,
+    check: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Return validated display-only measurements from the check's own run, or None.
+
+    The artifact is produced by the pull request's workflow, so its numbers are
+    self-reported. They never change the check's status; any mismatch or
+    malformed value simply leaves the measurements unavailable.
+    """
+    prefix = contract.get("measurements_artifact_prefix")
+    member = contract.get("measurements_member")
+    if not isinstance(prefix, str) or not isinstance(member, str) or status not in {"passed", "failed"}:
+        return None
+    # Re-runs keep the run ID, so bind to the attempt of the job that produced this check.
+    job_match = re.search(r"/actions/runs/([0-9]+)/job/([0-9]+)(?:[/?#]|$)", (check or {}).get("details_url") or "")
+    if not job_match or int(job_match.group(1)) != run_id:
+        return None
+    try:
+        job = _request(f"https://api.github.com/repos/{repo}/actions/jobs/{job_match.group(2)}", token)
+        attempt = job.get("run_attempt")
+        if (
+            job.get("run_id") != run_id
+            or job.get("head_sha") != revision
+            or type(attempt) is not int
+            or attempt < 1
+        ):
+            return None
+        expected_name = f"{prefix}{run_id}-{attempt}"
+        listing = _request(
+            f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/artifacts"
+            f"?name={quote(expected_name, safe='')}&per_page=100",
+            token,
+        )
+        artifacts = [
+            artifact for artifact in listing.get("artifacts", [])
+            if isinstance(artifact, dict) and artifact.get("name") == expected_name
+        ]
+        if listing.get("total_count") != 1 or len(artifacts) != 1:
+            return None
+        artifact = artifacts[0]
+        artifact_id = artifact.get("id")
+        workflow_run = artifact.get("workflow_run")
+        if (
+            artifact.get("expired") is not False
+            or not isinstance(workflow_run, dict)
+            or workflow_run.get("id") != run_id
+            or not isinstance(artifact_id, int)
+            or isinstance(artifact_id, bool)
+        ):
+            return None
+        document = artifact_document(
+            _request_bytes(f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip", token),
+            member,
+        )
+    except (HTTPError, URLError, OSError, ValueError, AttributeError, TypeError):
+        return None
+    if (
+        set(document) != {"version", "run_id", "run_attempt", "repository", "head_sha", "control", "measurements"}
+        or document["version"] != 1
+        or document["run_id"] != run_id
+        or document["run_attempt"] != attempt
+        or document["repository"] != repo
+        or document["head_sha"] != revision
+        or document["control"] != control_id
+    ):
+        return None
+    measurements = document["measurements"]
+    try:
+        evaluator_module().validate_measurements(control_id, measurements, status)
+    except (ValueError, TypeError, KeyError):
+        return None
+    return measurements
 
 
 def proven_check_evidence(
@@ -514,6 +659,8 @@ def proven_check_evidence(
         and not platform_proof_required
     ):
         return check_run_evidence(check_name, provider_name, check)
+    if platform_proof_required and check.get("status") != "completed":
+        return not_run(check_name, "The artifact-backed check has not completed.")
     app = check.get("app")
     app_slug = contract.get("app_slug")
     workflow_path = contract.get("workflow_path")
@@ -619,7 +766,15 @@ def proven_check_evidence(
             repo, revision, token, run_id, contract, check, provider_name,
             trusted_base_revision, trusted_workflow_ref,
         )
-    return check_run_evidence(check_name, provider_name, check)
+    result = check_run_evidence(check_name, provider_name, check)
+    control_ids = contract.get("control_ids") or []
+    if len(control_ids) == 1:
+        measurements = self_reported_measurements(
+            repo, revision, token, run_id, contract, control_ids[0], result["status"], check,
+        )
+        if measurements is not None:
+            result["measurements"] = measurements
+    return result
 
 
 def collect_checks(
@@ -648,10 +803,9 @@ def collect_checks(
     matching: dict[str, list[dict[str, Any]]] = {name: [] for name in check_names}
     wrong_app_only: dict[str, bool] = {name: False for name in check_names}
     enumeration_failures: set[str] = set()
-    attempts = 0
-    while True:
-        attempts += 1
-        for name in check_names - enumeration_failures:
+
+    def refresh(names: set[str]) -> None:
+        for name in names - enumeration_failures:
             try:
                 check_runs = enumerate_check_runs(repo, revision, token, name)
             except (HTTPError, URLError, OSError, ValueError, KeyError):
@@ -666,17 +820,25 @@ def collect_checks(
                     if check_matches_declared_app(check, contract)
                 ]
                 wrong_app_only[name] = bool(same_name and not matching[name])
-        complete = all(
-            name in enumeration_failures
-            or (
-                matching[name]
-                and (len(matching[name]) > 1 or matching[name][0].get("status") == "completed")
-            )
-            for name in check_names
-        )
-        if complete or time.monotonic() >= deadline or attempts >= maximum_attempts:
+
+    attempts = 0
+    pending = set(check_names)
+    while True:
+        attempts += 1
+        refresh(pending)
+        pending = {
+            name for name in check_names - enumeration_failures
+            if not matching[name]
+            or (len(matching[name]) == 1 and matching[name][0].get("status") != "completed")
+        }
+        if not pending or time.monotonic() >= deadline or attempts >= maximum_attempts:
             break
         time.sleep(10)
+    # Waiting can leave cached completed checks stale. Refresh every provable
+    # name once so late duplicates, reruns, disappearance and errors cannot pass
+    # using an earlier result. A single immediate snapshot needs no extra call.
+    if attempts > 1:
+        refresh(check_names)
 
     results: dict[str, dict[str, dict[str, Any]]] = {}
     for check_name, contract in expected.items():
@@ -749,14 +911,14 @@ def collect_checks(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Collect selected Guardrails v2 GitHub check evidence")
+    parser = argparse.ArgumentParser(description="Collect selected Proof GitHub check evidence")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"))
     parser.add_argument("--revision", required=True)
     parser.add_argument("--token", default=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
-    parser.add_argument("--policy", type=Path, default=Path(".guardrails/policy.yaml"))
-    parser.add_argument("--profiles", type=Path, default=Path(".guardrails/profiles.yaml"))
-    parser.add_argument("--catalog", type=Path, default=Path(".guardrails/control-catalog.yaml"))
-    parser.add_argument("--providers", type=Path, default=Path(".guardrails/providers.yaml"))
+    parser.add_argument("--policy", type=Path, default=Path(".proof/policy.yaml"))
+    parser.add_argument("--profiles", type=Path, default=Path(".proof/profiles.yaml"))
+    parser.add_argument("--catalog", type=Path, default=Path(".proof/control-catalog.yaml"))
+    parser.add_argument("--providers", type=Path, default=Path(".proof/providers.yaml"))
     parser.add_argument("--trusted-base-revision", required=True)
     parser.add_argument("--trusted-workflow-ref", required=True)
     parser.add_argument("--operation", choices=("change", "release"), default="change")

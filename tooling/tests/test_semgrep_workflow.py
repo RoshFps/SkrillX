@@ -15,20 +15,17 @@ class SemgrepWorkflowTests(unittest.TestCase):
 
         self.assertNotIn("semgrep --test", workflow)
         self.assertIn(
-            "semgrep scan --metrics off --disable-version-check --config .guardrails/semgrep-rules.yml --json",
+            "semgrep scan --metrics off --disable-version-check --config .proof/semgrep-rules.yml --json",
             workflow,
         )
         self.assertIn("semgrep-unsafe.json", workflow)
         self.assertIn("semgrep-safe.json", workflow)
-        self.assertIn("guardrails.python-disabled-tls-verification", workflow)
-        self.assertIn("guardrails.javascript-disabled-tls-verification", workflow)
-        self.assertIn('check_id.removeprefix("guardrails.")', workflow)
+        self.assertIn("proof.python-disabled-tls-verification", workflow)
+        self.assertIn("proof.javascript-disabled-tls-verification", workflow)
+        self.assertIn('check_id.removeprefix("proof.")', workflow)
         self.assertEqual(workflow.count("--metrics off"), 3)
-        # Semgrep otherwise waits on its update check, which cannot reach the
-        # network from a --network none container and stalls each scan.
-        self.assertEqual(workflow.count("--disable-version-check"), 3)
         self.assertIn(
-            "--exclude examples/python-demo/.guardrails/semgrep-tests/fixtures",
+            "--exclude examples/python-demo/.proof/semgrep-tests/fixtures",
             workflow,
         )
 

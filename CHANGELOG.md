@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to SkrillX (formerly AI Software Toolkit) are documented here.
+All notable changes to SkrillX (a fork of AI Software Toolkit) are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/). Starting with
 1.0, incompatible changes to the documented public runtime, configuration,
@@ -8,68 +8,407 @@ or evidence contracts require a major release and migration guidance.
 
 ## [Unreleased]
 
-### Usability, features, and performance (RoshFps fork)
+### SkrillX fork
 
+- Sync with upstream AI Software Toolkit `main` (11fab01), including credential
+  isolation for the Snyk, FOSSA, and AI PR Review templates, the Proof rename,
+  the `qa-bootstrap` and action skills, and the new scorecard measurements.
+- `skrillx` CLI 2.2.0: quick start and typo hints, colored output, a `check`
+  summary line, an HTML scorecard dashboard (`check --html`, `report`),
+  `skills list|search|show`, shell completion, a PATH installer
+  (`tooling/install-cli.sh`), and a parallel test runner (`tooling/run_tests.py`).
+- Rename the project to SkrillX and the command to `skrillx`
+  (`bin/skrillx`, `workflows/skrillx-setup.yml`, `SKRILLX_PYTHON`).
 - Semgrep scans pass `--disable-version-check` (and `--metrics off` for local
-  scans). Inside the `--network none` container Semgrep's update check could
-  not connect and stalled each of the workflow's three scans for over a
-  minute; measured locally, a fixture scan drops from 98.8s to 1.6s.
-- Security and performance audit: `workflows/skrillx-setup.yml` no longer
-  persists the write token in the checkout or exposes it to the downloaded
-  archive (it is passed only to `git push` and `gh pr create`); glob patterns in
-  the change-scope and documentation validators are compiled once instead of
-  per file; `tooling/test.sh` is now executable as documented.
-- Rename the project to **SkrillX** and the command to `skrillx` (launcher
-  `bin/skrillx`, archive `skrillx.pyz`, starter workflow
-  `workflows/skrillx-setup.yml`). The `.guardrails/` runtime contract, the
-  `toolkit.toml` / `toolkit.lock.json` files, and the `.artifacts/ai-toolkit/`
-  storage paths are unchanged, so existing installations, backups, and
-  rollbacks keep working.
-- `skrillx` with no command now prints a five-step quick start instead of a
-  usage error, and a mistyped command suggests the closest one
-  (`skrillx doctr` -> "Did you mean `skrillx doctor`?").
-- Human-readable output is colored on interactive terminals (PASS, FAIL,
-  NO_RESULT, readiness, headings, and next steps). Color is off for pipes,
-  CI logs, and JSON; `--no-color` and `NO_COLOR=1` turn it off and
-  `FORCE_COLOR=1` turns it on. Stripping color yields the plain report exactly.
-- `check` prints a one-line summary (`N passed · N failed · N unverified · N
-  not activated`), saves the result card to
-  `.artifacts/ai-toolkit/last-check.json`, and with `--html [PATH]` writes a
-  self-contained HTML scorecard dashboard (light/dark, filter by status,
-  search, phone-friendly, no network requests).
-- New `skrillx report` re-renders the last check without rescanning, as
-  text, as HTML (`--html [PATH]`), or straight into the browser (`--open`).
-- `skills list` now shows each skill's description and marks the starter set
-  on a terminal or with `--long` (piped output stays one name per line);
-  new `skills search WORDS` (word-start matching, name matches first) and
-  `skills show NAME` (description, files, install command, typo hints).
-- New `skrillx completion bash|zsh|fish` prints tab-completion scripts
-  generated from the CLI's own parser.
-- New `bin/skrillx` launcher and `bash tooling/install-cli.sh` put the
-  `skrillx` command on `PATH` (a small wrapper in `~/.local/bin`, `--prefix`,
-  `--uninstall`); the launcher checks for Python 3.11+.
-- `tooling/test.sh` now runs each test module in its own process in parallel
-  (`tooling/run_tests.py`; `-j N`, `-k NAME`, `-v`), scheduling the slowest
-  modules first and reporting the slowest three. The installer module is
-  loaded once per CLI process instead of on every call.
-- Update pinned GitHub Actions in the workflow templates (`workflows/`) to
-  their latest releases:
-  `actions/checkout` v7.0.1, `actions/upload-artifact` v7.0.1,
-  `actions/download-artifact` v8.0.1, `github/codeql-action` v4.38.2,
-  `actions/dependency-review-action` v5.0.0, and
-  `SonarSource/sonarqube-quality-gate-action` v1.2.1.
-- Maintained by Roshan Immanuel at `RoshFps/SkrillX`; repository
-  links, badges, and the setup workflow's release download now point there.
-- CLI version 2.2.0.
+  scans), so the update check no longer stalls each scan for over a minute
+  inside the `--network none` container (carries over RoshFps/SkrillX#11).
+- Add Windows install steps (Git Bash) to the README and `docs/install.md`.
+- Run Pylint error-level checks in `tooling/lint.sh` (`.pylintrc`).
+- Scope the setup workflow's write token to `git push` and `gh pr create`, compile
+  validator glob patterns once, and make `tooling/test.sh` executable.
+- Restore the original author's copyright in `LICENSE` and `NOTICE`: Ravi Singh
+  and Roshan Immanuel are both credited, and `CONTRIBUTORS.md` links upstream.
 
-### Earlier unreleased changes
+- Preserve consumer edits across successive ordinary toolkit upgrades, including
+  installations first adopted without a lock. Unresolved conflicts keep their
+  offered canonical hash baseline; each update receives a unique rollback backup.
+- Recognize Python development dependency groups during command discovery and
+  require unittest imports before proposing unittest from test files.
+- Resolve SARIF tool components by GUID when no index is supplied, so extension
+  findings use their own rule severity. Unknown GUIDs use result-level severity
+  rather than inheriting an unrelated driver rule.
+- Bind FOSSA analysis and policy evaluation to the same project, configuration,
+  and endpoint. Refuse arguments that skip uploading, override the revision or
+  credential, or omit required project identity values.
+
+- Repair AI provider result summaries for valid findings, withhold fork scans
+  until independently verified, and replace the Snyk setup action's unsafe
+  shell wrapper with native CLI 1.1307.4 and a verified checksum. Preserve
+  FOSSA project identity across analysis and policy evaluation, and refuse
+  upload, revision, or credential overrides.
+
+- **Breaking (Snyk, FOSSA, and AI PR Review templates):** provider
+  credentials no longer share a job or a runner with pull-request code.
+  `snyk.yml`, `fossa.yml`, and `ai-pr-review.yml` run on
+  `pull_request_target`, so GitHub takes them and the `.proof` runtime from
+  the default branch. They read `SNYK_TOKEN`, `FOSSA_API_KEY`, and
+  `ANTHROPIC_API_KEY` from a `proof-providers` environment, which must be
+  limited to the default branch, and they check the pull-request head out as
+  data only. `.proof/adapter.py --data-only` runs FOSSA with
+  `--static-only-analysis` and a fixed endpoint, and refuses a `.fossa.yml`
+  that names a server or key. It runs Snyk Open Source once per static
+  lockfile and reports `requires-dependency-resolution` when a manifest needs
+  a build tool. Each job posts the unchanged provider check for the head, with
+  the external id `proof:<provider>:<run id>:<head sha>`, and uploads the
+  result, with its finding counts, as the run-bound artifact
+  `proof-<provider>-<run id>` through the new `.proof/provider_check.py`. The
+  job's own check is renamed, for example `Snyk Code scan`. The provider
+  contracts for these seven checks move from `trusted_paths` and separate
+  measurement artifacts to that artifact contract. The collector now accepts
+  `blocked` run-bound results, keeps validated counts from the artifact, and
+  refuses an artifact-backed check that has not completed. Fork pull requests
+  get `action_required` / `credential-withheld` unless
+  independently verified. `PROOF_SETUP_COMMAND` no longer affects
+  Snyk. `ai-pr-review.yml` drops `workflow_call`. `doctor.py --github` reports
+  the environment's branch policy and flags repository or organization copies
+  of provider secrets. **Migration:** see
+  [credential isolation](docs/providers/README.md#migrating-from-the-pull_request-templates).
+  Until the new templates reach the default branch, the pull request that adds
+  them shows these checks as not run.
+
+- **Breaking (Security Scanning bundle):** `workflows/security-scanning.yml`
+  no longer has `FOSSA` or `Snyk Open Source` jobs, and no longer declares the
+  `FOSSA_API_KEY` / `SNYK_TOKEN` secrets or the `fossa-command` /
+  `snyk-open-source-command` inputs. Those jobs put the credential in a
+  `pull_request` job that checked out the pull-request head and ran a
+  consumer-supplied `FOSSA_COMMAND` / `SNYK_OPEN_SOURCE_COMMAND`, so a
+  same-repository pull request could read it. The bundle now holds no secret.
+  To migrate, copy the `fossa.yml` and `snyk.yml` adapter templates, move
+  the command's arguments into `FOSSA_ARGS` / `SNYK_OPEN_SOURCE_ARGS`, remove
+  the two inputs and secrets from any `workflow_call` caller (GitHub rejects a
+  caller that passes an undeclared input or secret), and delete the
+  `FOSSA_COMMAND` / `SNYK_OPEN_SOURCE_COMMAND` variables. Proof results do not
+  change: the provider contracts accept these checks only from the `FOSSA` and
+  `Snyk` workflows, never from `Security Scanning`. A ruleset that required the
+  `FOSSA` or `Snyk Open Source` context by name waits, rather than passes,
+  until an adapter template produces it. Controls stay advisory, and this
+  repository does not run the bundle.
+
+- Stop intermittent `Directory not empty` failures in the unit tests.
+  `tooling/test.sh` sets `maintenance.auto`, `maintenance.autoDetach`,
+  `gc.auto`, and `gc.autoDetach` off through git's environment configuration,
+  so background git maintenance started by a test's commits can no longer race
+  the removal of its temporary repository.
+
+- Activate `dependency-vulnerability` (Snyk Open Source) as advisory in this
+  repository's `.proof/policy.yaml`. The Snyk workflow already ran and
+  uploaded finding counts, but the control was not activated, so the
+  scorecard omitted it. The installed consumer baseline is unchanged.
+
+- Show CodeQL finding counts by security severity on the scorecard dashboard.
+  The CodeQL workflow template writes its SARIF output to the runner, counts it
+  with the new `.proof/measurements.py sarif` converter, and uploads a
+  self-reported `findings` measurement for `deep-sast`. Each result takes its
+  rule's `security-severity` (from the driver or any query-pack extension) in
+  GitHub code scanning's bands (resolved per tool component), falling back to
+  the result level and then the rule's default level; results with a
+  suppression in force are skipped, and only a successful analysis is counted. Refresh the runtime, `providers.yaml`, and `codeql.yml`
+  together.
+
+- Keep shipped workflow templates current. Dependabot updates only
+  `.github/workflows/`, so templates under `workflows/` had drifted to older
+  action pins (checkout v6, upload-artifact v4, CodeQL v3 in
+  `security-scanning.yml`, an older SonarQube quality gate). Templates now use
+  the pins this repository runs, and `tooling/sync_workflow_templates.py`
+  checks (and with `--write`, repairs) that each installed template matches
+  its source and that every action has one pin; a unit test enforces it. CodeQL moves to
+  4.38.2 everywhere (superseding Dependabot PRs #68–#70, which bumped only
+  `.github/workflows/`). This
+  repository now runs the shipped Snyk, FOSSA, and SonarQube templates instead
+  of older local variants, so Snyk runs through the trusted adapter (its
+  previous SARIF upload to code scanning and push-to-main scan are dropped) and
+  the FOSSA workflow is
+  installed but not activated here (`FOSSA_ENABLED=false`) until a valid
+  `FOSSA_API_KEY` is configured; the adapter reported the current key as
+  `authentication-failed`. The FOSSA template gains a
+  `FOSSA_ENABLED=false` opt-out like Snyk's, and the SonarQube template skips
+  until `SONAR_HOST_URL` is set.
+
+- **Breaking (AI PR Review template):** `workflows/ai-pr-review.yml` now runs
+  `AI_REVIEW_COMMAND` from the pull request's base revision (`trusted/`)
+  against the head revision (`candidate/`), passes only `ANTHROPIC_API_KEY`
+  to the review step, and exposes `AI_REVIEW_TARGET`, `AI_REVIEW_BASE_SHA`,
+  `AI_REVIEW_HEAD_SHA`, and `AI_REVIEW_MODEL`; result files are written
+  outside the checkouts. An optional `AI_REVIEW_SETUP_COMMAND`
+  (`review-setup-command` input) installs dependencies in a separate step
+  without the key. Jobs are skipped instead of failing until
+  `AI_REVIEW_COMMAND` is set, and the consolidation job summarizes findings
+  without failing. An existing adapter command that assumed it ran in the head
+  checkout must read `AI_REVIEW_TARGET` instead. Add the opt-in reference
+  adapter `tooling/ai_review_claude.py` (pinned by
+  `tooling/requirements-ai-review.txt`), which reviews the diff with Claude,
+  default model `claude-sonnet-5-5`. This repository replaces its four
+  unmatched per-role AI review workflows with the template, so its AI review
+  checks can match the provider contracts once configured.
+
+- Show Snyk finding counts by severity on the scorecard dashboard. The provider
+  adapter gains `--measurements PATH`, which writes the `findings` measurement
+  from the JSON Snyk already prints (Snyk Code SARIF levels, Snyk Open Source
+  severities, summed across `--all-projects`) for a completed scan. The Snyk
+  workflow checks out the base revision's `measurements.py` and `evaluate.py`
+  beside the adapter, packages the counts in a reset environment, and uploads
+  `proof-measurements-snyk-code-` / `proof-measurements-snyk-open-source-`.
+  `deep-sast` and `dependency-vulnerability` accept `findings`. Refresh the
+  runtime, `providers.yaml`, and `snyk.yml` together.
+
+- Show Semgrep CE and Gitleaks finding counts on the scorecard dashboard. The
+  Semgrep CE and Gitleaks workflows write their JSON report under the runner's
+  temporary directory, count it with the new `.proof/measurements.py semgrep`
+  and `gitleaks` converters, and upload only the counts as a self-reported
+  `findings` measurement (`total`, `critical`, `high`, `medium`, `low`,
+  `unrated`) for `custom-static-analysis` and `secret-detection`. Semgrep
+  `CRITICAL` maps to critical, `ERROR`/`HIGH` to high, `WARNING`/`MEDIUM` to
+  medium, and `INFO`/`LOW` to low; Gitleaks findings are unrated because the
+  scanner does not rate severity. Findings are checked for arithmetic only,
+  never against the check status. Cards for CodeQL, SonarQube, Dependency
+  Review, Snyk, and FOSSA now say where their counts live instead of implying
+  they were omitted. Refresh the runtime, `providers.yaml`, `semgrep-ce.yml`,
+  and `gitleaks.yml` together.
+
+- Show AI review finding counts on the scorecard dashboard. Each job of the
+  `ai-pr-review.yml` template counts its reviewer's result file with the new
+  `.proof/measurements.py review-findings` command and uploads a
+  self-reported `review_findings` measurement (`total`, `p0`, `p1`, `p2`,
+  `p3`, `unresolved_blocking`), so the AI Engineering, QA, Security, and
+  Repository Standards cards read, for example, **4 findings: 0 P0 · 1 P1 ·
+  2 P2 · 1 P3 · 1 unresolved P0/P1**. Counts are the AI provider's judgment,
+  never change a result, and AI review stays advisory-only. Codex Code Review
+  cards explain that findings are review comments and are not counted.
+  Refresh the runtime and `providers.yaml`, and recopy `ai-pr-review.yml`.
+
+- Show what PR Metadata evaluated on the scorecard dashboard. The trusted PR
+  metadata validator now adds `pr_metadata` to its result: `title_matches` and
+  the `required_sections` and `missing_sections` counts, never the title, body,
+  or section names. The evaluator and schema accept it only on
+  `pr-metadata.repository-pr-metadata` and check it against the status; the
+  PR Metadata workflow binds it into its run-bound artifact, and the collector
+  omits malformed detail without changing the status. The card reads, for
+  example, **Title matches the required format · 3 of 3 required sections
+  present** and is not labeled self-reported. Refresh the runtime and
+  `pr-metadata.yml` together.
+
+- Show Migration Validation counts on the scorecard dashboard. The Migration
+  Validation workflow sets `PROOF_MEASUREMENTS_FILE`, and a migration command
+  that writes the new `migrations` measurement (`checked`, `failed`) gets
+  them shown as self-reported; zero checked reads **No migrations found to
+  check**. `validate_no_migrations.py` records each migration surface it finds
+  as checked and failed. Build and Format and Lint cards now explain that only
+  the command's exit status is reported and why. Refresh the runtime,
+  `providers.yaml`, and `migration-validation.yml` together.
+
+- Show repository validator counts on the scorecard dashboard. The Validate
+  workflow's repository, docs, and ground-truth jobs now record self-reported
+  measurements: contract groups passed, failed, and not run; Markdown files,
+  local links checked, broken links, and documentation mapping failures; and
+  ground-truth documents declared, found, and missing. The evidence schema
+  gains the `contracts`, `documentation`, and `documents` measurement kinds,
+  each limited to its control and checked for arithmetic and status
+  consistency. The installed repository validator now runs named contract
+  groups in order. The dashboard's assessment text now states that ground
+  truth checks only that each declared document exists. Refresh the runtime,
+  `providers.yaml`, and `repository-validation.yml` together.
+
+- Score PR Metadata on the scorecard dashboard. `Proof Scorecard` now also
+  runs when a pull request is edited, runs the trusted base PR metadata
+  validator on the current title and body, and passes the result to
+  `.proof/scorecard.py` with the new `--pull-request-revision` and
+  `--pull-request-evidence` options. The evaluator's new `companions`
+  argument scores that `pull-request` subject beside the commit, and it
+  counts toward the same totals. A missing result reports **Unverified**. The scorecard JSON gains an optional
+  `companion_subjects` list. A control that policy activates on a subject the
+  evaluation did not score keeps `not_activated`, but adds `inactive_reason:
+  other_subject` and `evidence_subject`; the dashboard labels it
+  **Checked on the PR** instead of **Not activated**. This repository's
+  `.proof/pr-metadata.yaml` now requires Conventional Commit titles and a
+  `## Verification` body section; the installed consumer default is unchanged.
+  Refresh the runtime and `proof-scorecard.yml` together; the workflow skips
+  PR metadata scoring when the trusted runtime lacks the new options.
+
+- Explain how the scorecard totals relate to the check table. A sentence under
+  the totals states how many active checks they count and how many of the
+  listed built-in checks are active, not activated, or not reported, so
+  "13/14" no longer looks inconsistent with 33 listed checks.
+
+- Show self-reported test totals and changed-line coverage on the scorecard
+  dashboard. The `Unit Tests` and `Changed Code Coverage` workflow templates
+  set `PROOF_MEASUREMENTS_FILE`, package a file the configured command writes
+  with the new `.proof/measurements.py` helper (unittest logs, JUnit XML, or
+  diff-cover JSON), and upload a non-fatal, attempt-bound
+  `proof-measurements-<run_id>-<run_attempt>` artifact. Evidence results gain an optional, display-only `measurements`
+  field accepted only on `unit-tests` and `changed-code-coverage`; provider
+  checks gain optional `measurements_artifact_prefix` and
+  `measurements_member`. The collector attaches measurements only when the
+  run, repository, head SHA, and control bind and the numbers agree with the
+  check status; otherwise they are omitted. `tooling/test.sh` now runs every
+  suite before returning a failure, so failed runs also record totals. Because the numbers come from the
+  pull request's own code, the dashboard labels them as not independently
+  verified, and they never change a result. Refresh the runtime, schemas,
+  provider config, and both workflows together; older evaluators reject the
+  new fields. Commands that do not write the file are unaffected.
+
+- Make the public PR scorecard page easier to scan. A **Needs attention** list
+  above the totals names failed, blocked, and unverified checks, most severe
+  first. Detail sections put those checks first, show execution time as a
+  readable duration, fold assessment criteria behind a disclosure, and group
+  not-activated and not-reported checks in a compact section, roughly halving
+  page length. On narrow screens the checks table keeps each result beside its
+  check name. When no controls are enforced, the status panel says the ALLOW
+  decision is not gated by any control and marks it **Advisory only**; a BLOCK
+  decision no longer shows the ALLOW explanation. Published metadata,
+  evaluation semantics, and badge output are unchanged.
+
+- Run the Snyk and FOSSA adapter from the trusted base revision. The
+  `workflows/snyk.yml` and `workflows/fossa.yml` templates check out
+  `.proof/adapter.py` from the pull request's base SHA into `trusted/`
+  (sparse, non-symlink) and run it against the head checkout in `candidate/`,
+  so a pull request cannot change the code that receives `SNYK_TOKEN` or
+  `FOSSA_API_KEY`. The `snyk-code`, `snyk-open-source`, and `fossa` contracts
+  list the adapter as a trusted path, so the scorecard records `not_run` for a
+  pull request whose adapter differs from the base. The trusted checkout is
+  the last step before the adapter runs, and the adapter step uses a reset
+  environment with the interpreter and `PATH` recorded before the setup
+  command, so candidate setup cannot replace the adapter or poison its
+  environment. Check names, evidence fragments, and reason codes are
+  unchanged.
+
+- **Breaking:** rename the Guardrails component to Proof as a hard cutover.
+  The installed runtime moves from `.guardrails/` to `.proof/`, repository
+  variables from `GUARDRAILS_*` to `PROOF_*`, the `Guardrail Scorecard` check
+  and workflows to `Proof Scorecard` / `proof-scorecard*.yml`, the Pages badge
+  to `proof-badge.svg`, artifact and external-ID prefixes to `proof-` /
+  `proof:`, and the `toolkit.toml` component and table to `proof`. Nothing
+  reads the old names. The installer refuses a Guardrails layout before
+  writing and prints the exact `git mv`/`git rm`/refresh commands for that
+  installation; the CLI rejects a Guardrails `toolkit.toml`. Evaluation
+  semantics, control IDs, evidence schemas, policy modes, and other check
+  names are unchanged. The next release must be a major version. See
+  [migrating from Guardrails](docs/proof/migrating-from-guardrails.md).
+
+- Fix three `skrillx` review follow-ups: re-running `init` for another
+  component no longer installs the default skill set over a narrower
+  selection; a project `skills install` (or `qa bootstrap`) adds its component
+  to `toolkit.toml` and the lock so the next `update` keeps the files; and
+  `update` validates both record destinations before mutating managed files
+  and restores files, configuration, and lock together when a record write
+  fails.
+
+- Expand the public scorecard with a compact table linking to check-specific
+  assessment details, validated optional check execution timings, and explicit
+  measurement gaps. Every check shows its canonical catalog ID next to its
+  name, and the scorecard workflow evaluates with `--all-catalog-controls`
+  so a control the policy explicitly leaves `not_activated` is published as
+  **Not activated** instead of **Not reported**. Keep all active controls
+  advisory in this repository's Proof policy; GitHub required-check rules
+  remain separate.
+
+- Harden action-skill verification: reject stale or duplicate client ledger
+  claims, package review contracts, and keep seeded scans self-contained.
+  QA publishes sanitized non-passing reasons while remaining unsuccessful,
+  restricts agent-authored provenance, and rejects PR-supplied commands.
+
+- Brand the public PR scorecard page as AI Software Toolkit instead of
+  Guardrails, matching the toolkit identity. Page content, badge URLs, bounded
+  metadata, and evaluation semantics are unchanged.
+- Default installation guidance to Actions scorecard summaries and artifacts,
+  with read-only detection of the target repository's visibility. Keep Pages
+  publication opt-in. Block publication when live visibility is unknown or a
+  private/internal repository lacks an explicitly configured and verified
+  private Pages destination (`GUARDRAILS_SCORECARD_BADGE_PAGES_ACCESS=private`).
+  Existing nonpublic publishers must configure private Pages and this variable
+  before their next publication; normal CI scorecards remain available.
+  Private publishing selects retained CI evidence without fetching the previous
+  authenticated report. Previously deployed public reports are not removed.
+
+- Make PR size reporting explicit with the `PR Size / Files & LOC` workflow,
+  measured-versus-limit tables, and counted/excluded totals. Preserve the
+  `PR Change Scope` check identity and existing advisory/enforced behavior.
+  Carry optional validated aggregate measurements into the public scorecard
+  dashboard; older evidence without measurements displays unavailable.
+- Reorganize documentation around six entry points (Install, Guardrails,
+  Skills, QA, Providers, Reference app), add the reference-app page, and
+  rewrite the maturity matrix with shipped / opt-in / planned labels checked
+  against the source tree. The source repository validator now fails when a
+  shipped workflow template, skill, provider, or tooling script is not
+  mentioned in published documentation; the audit it enabled documented the
+  `ai-pr-review.yml`, `security-scanning.yml`, and `soak.yml` templates, the
+  AI review adapters and soak provider, the `prepare-safe-change` skill, and
+  the release asset scripts, and corrected the architecture guide's account of
+  vendor providers.
+
+- Implement the five action skills `fix-ci`, `generate-unit-tests`,
+  `fix-security-finding`, `dependency-upgrade`, and `address-pr-findings`,
+  replacing their placeholders. Each defines inputs, permitted changes, stop
+  conditions, verification, and an outcome report; reuses the canonical review
+  skills; ships a seeded fixture; and keeps a per-client `VERIFICATION.md`
+  ledger that `tooling/validate-skills.py` now requires. No action skill is
+  labelled verified until a live run in Codex and Claude Code is recorded.
+  `tooling/install-skills.sh` gains `--client codex|claude-code`.
+- QA: `qa-bootstrap` documents version-controlled test plans
+  (`plans/<app>.yaml`), findings with regression links (`findings/<id>.md`),
+  and rerun reporting; result rows may carry `origin`, `scenario`, and
+  `finding`, rendered in the trusted report. FLAKY now maps to `blocked`
+  (`analysis-incomplete`) instead of passing, so a pass on retry can never
+  satisfy the advisory `QA / report` check; non-passing reports state the
+  overall status and reason. Functional QA remains advisory-only.
+
+- Ship adapter-owned Snyk and FOSSA workflow templates (`workflows/snyk.yml`,
+  `workflows/fossa.yml`) and install `.guardrails/adapter.py`, which runs
+  `snyk code test`, `snyk test`, and `fossa analyze` followed by `fossa test`
+  for the exact revision, maps exit codes and output to the four evidence
+  statuses, and writes nested v2 evidence fragments that `scan.py` merges.
+  Consumers supply arguments (`SNYK_CODE_ARGS`, `SNYK_OPEN_SOURCE_ARGS`,
+  `FOSSA_ARGS`), never the verb, so an upload alone cannot pass, and any
+  argument whose path resolves outside the checkout is rejected as
+  `revision-mismatch` before the provider runs. Non-passing
+  results carry a standard reason code as the prefix of `reason`
+  (`configuration-missing`, `credential-missing`, `authentication-failed`,
+  `execution-error`, `analysis-incomplete`, `revision-mismatch`,
+  `unsupported-project`, `timed-out`); the evidence schema is unchanged. The
+  FOSSA CLI is pinned by version and SHA-256. `doctor` adds adapter, local
+  credential, and template rows for selected external providers; `skrillx
+  check` turns reason codes into next actions. Add provider guides, a reason
+  code reference, contract tests for every outcome, and a live verification
+  ledger; no adapter is labelled verified until a live run is recorded there.
+  Existing `snyk-code`, `snyk-open-source`, and `fossa` check identities are
+  unchanged.
+
+- Ship adapter-owned Snyk and FOSSA workflow templates (`workflows/snyk.yml`,
+  `workflows/fossa.yml`) and install `.guardrails/adapter.py`, which runs
+  `snyk code test`, `snyk test`, and `fossa analyze` followed by `fossa test`
+  for the exact revision, maps exit codes and output to the four evidence
+  statuses, and writes nested v2 evidence fragments that `scan.py` merges.
+  Consumers supply arguments (`SNYK_CODE_ARGS`, `SNYK_OPEN_SOURCE_ARGS`,
+  `FOSSA_ARGS`), never the verb, so an upload alone cannot pass, and any
+  argument whose path resolves outside the checkout is rejected as
+  `revision-mismatch` before the provider runs. Non-passing
+  results carry a standard reason code as the prefix of `reason`
+  (`configuration-missing`, `credential-missing`, `authentication-failed`,
+  `execution-error`, `analysis-incomplete`, `revision-mismatch`,
+  `unsupported-project`, `timed-out`); the evidence schema is unchanged. The
+  FOSSA CLI is pinned by version and SHA-256. `doctor` adds adapter, local
+  credential, and template rows for selected external providers; `skrillx
+  check` turns reason codes into next actions. Add provider guides, a reason
+  code reference, contract tests for every outcome, and a live verification
+  ledger; no adapter is labelled verified until a live run is recorded there.
+  Existing `snyk-code`, `snyk-open-source`, and `fossa` check identities are
+  unchanged.
 
 - `tooling/lint.sh` now runs Pylint 4.0.10 on tracked Python files with
   error and fatal checks only (`.pylintrc`), alongside Ruff and yamllint.
   Semgrep fixtures that intentionally shadow third-party modules are
   excluded.
 
-- Add the shared `ai-toolkit` CLI (`tooling/ai_toolkit`) with `discover`,
+- Add the shared `skrillx` CLI (`tooling/ai_toolkit`) with `discover`,
   `init`, `doctor`, `check`, `providers`, `skills`, `qa`, and `update`. The CLI
   dispatches to the existing installer, diagnostics, scanner, configuration,
   and skill sources; it does not reimplement evaluation, and installed
@@ -86,7 +425,7 @@ or evidence contracts require a major release and migration guidance.
   skill for failed capabilities. `update` refreshes unmodified managed files,
   preserves modified ones as reported conflicts, keeps a backup, and supports
   `--rollback`. Add `tooling/build_archive.py` for a checksummed
-  `ai-toolkit.pyz`, the `toolkit-setup` skill, the `AI Toolkit Setup` starter
+  `skrillx.pyz`, the `toolkit-setup` skill, the `AI Toolkit Setup` starter
   workflow, and the install guide. The `.guardrails/` runtime contract,
   installer behavior, and existing check identities are unchanged.
 
@@ -107,7 +446,7 @@ or evidence contracts require a major release and migration guidance.
   settings. Verify the Docker-mounted Git repository before accepting Gitleaks
   evidence so an unavailable mount cannot produce a false passing scan.
 
-- Rename the GitHub repository to `RoshFps/SkrillX` and update
+- Rename the GitHub repository to `ravisingh11/ai-software-toolkit` and update
   clone, release, security reporting, and Pages links. Add a migration guide
   for existing clones, forks, workflows, and badges. Runtime contracts and
   existing release tags are unchanged.
@@ -223,3 +562,8 @@ Initial public release.
 - Added reusable GitHub Actions workflows and default-branch ruleset templates.
 - Added engineering, QA, security, and repository-standards AI review guidance.
 - Added reusable engineering skills and an embedded Python consumer example.
+
+[0.1.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v0.1.0
+[0.2.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v0.2.0
+[1.0.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v1.0.0
+[Unreleased]: https://github.com/ravisingh11/ai-software-toolkit/compare/v1.0.0...HEAD

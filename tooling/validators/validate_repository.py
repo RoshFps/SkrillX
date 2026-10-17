@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the canonical guardrails repository."""
+"""Validate the canonical AI Software Toolkit repository."""
 
 from __future__ import annotations
 
@@ -165,6 +165,7 @@ def validate_provider_document(config: dict, catalog: dict[str, dict]) -> None:
                 or set(check) - {
                     "check_name", "workflow", "workflow_path", "app_slug", "external_id_prefix",
                     "artifact_name_prefix", "artifact_member", "trusted_paths",
+                    "measurements_artifact_prefix", "measurements_member",
                 }
             ):
                 raise ValueError(f"provider {provider_id} {capability} check is invalid")
@@ -231,6 +232,27 @@ def validate_provider_document(config: dict, catalog: dict[str, dict]) -> None:
                 raise ValueError(f"provider {provider_id} {capability} artifact contract requires external_id_prefix")
             if "external_id_prefix" in check and "workflow_path" not in check:
                 raise ValueError(f"provider {provider_id} {capability} artifact contract requires workflow_path")
+            measurement_fields = {"measurements_artifact_prefix", "measurements_member"}
+            if measurement_fields.intersection(check):
+                if (
+                    not measurement_fields.issubset(check)
+                    or capability not in {
+                        "unit-tests", "changed-code-coverage", "repository-validation",
+                        "documentation-validation", "repository-ground-truth", "migration-validation",
+                        "ai-engineering-review", "ai-qa-review", "ai-security-review",
+                        "ai-repository-standards-review",
+                        "custom-static-analysis", "secret-detection", "deep-sast", "dependency-vulnerability",
+                    }
+                    or "workflow_path" not in check
+                    or "external_id_prefix" in check
+                    or any(
+                        not isinstance(check[field], str)
+                        or re.fullmatch(r"[A-Za-z0-9._-]+", check[field]) is None
+                        or len(check[field]) > limit
+                        for field, limit in (("measurements_artifact_prefix", 150), ("measurements_member", 100))
+                    )
+                ):
+                    raise ValueError(f"provider {provider_id} {capability} measurements contract is invalid")
         reviews = provider.get("reviews", {})
         if not isinstance(reviews, dict) or any(
             capability not in capabilities for capability in reviews
@@ -451,7 +473,7 @@ def validate_control_catalog() -> int:
     return len(controls)
 
 
-def validate_guardrail_contract() -> None:
+def validate_proof_contract() -> None:
     catalog = validate_control_catalog_document(
         load_json_object(ROOT / "policies" / "control-catalog.yaml")
     )
@@ -461,12 +483,12 @@ def validate_guardrail_contract() -> None:
     validate_provider_document(provider_config, catalog)
     validate_provider_template_names(provider_config)
     validate_policy_document(
-        load_json_object(ROOT / "guardrails" / "baseline.yaml"),
+        load_json_object(ROOT / "proof" / "baseline.yaml"),
         set(profiles["profiles"]),
         catalog,
     )
     validate_evidence_document(
-        load_json_object(ROOT / "guardrails" / "evidence-example.yaml"),
+        load_json_object(ROOT / "proof" / "evidence-example.yaml"),
         catalog,
         provider_config["providers"],
     )
@@ -474,7 +496,7 @@ def validate_guardrail_contract() -> None:
         "control-catalog.schema.json", "profiles.schema.json", "providers.schema.json",
         "policy.schema.json", "evidence.schema.json",
     ):
-        schema = load_json_object(ROOT / "guardrails" / name)
+        schema = load_json_object(ROOT / "proof" / name)
         if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
             fail(f"{name} must use JSON Schema 2020-12")
         if schema.get("properties", {}).get("version", {}).get("const") != 2:
@@ -504,13 +526,93 @@ def validate_no_machine_paths() -> None:
             fail(f"{relative_path} contains a machine-local path")
 
 
+DOCUMENTATION_ROOTS = ("README.md", "CONTRIBUTING.md", "AGENTS.md", "docs", "skills/README.md", "workflows/README.md")
+
+
+def documentation_text(root: Path = ROOT) -> str:
+    """Current published Markdown, excluding archived historical plans."""
+    parts = []
+    for relative in DOCUMENTATION_ROOTS:
+        path = root / relative
+        if path.is_file():
+            parts.append(path.read_text(encoding="utf-8"))
+        elif path.is_dir():
+            parts.extend(item.read_text(encoding="utf-8") for item in sorted(path.rglob("*.md")) if item.is_file() and "archive" not in item.relative_to(root).parts)
+    return "\n".join(parts)
+
+
+def mentions_filename(text: str, name: str) -> bool:
+    """Accept a filename or path mention, never a suffix of another filename."""
+    return re.search(r"(?<![\w.-])" + re.escape(name) + r"(?![\w.-])", text) is not None
+
+
+def documentation_gaps(root: Path = ROOT) -> list[str]:
+    """Shipped surfaces that no published documentation mentions.
+
+    Every workflow template must appear in workflows/README.md, every skill in
+    skills/README.md, every provider display name in the provider or control
+    setup guides, and Python/shell files plus executable or shebang-bearing
+    tooling commands somewhere in the published docs.
+    """
+    gaps: list[str] = []
+    workflows_readme = (root / "workflows" / "README.md").read_text(encoding="utf-8") if (root / "workflows" / "README.md").is_file() else ""
+    for path in sorted((root / "workflows").glob("*")):
+        if path.suffix not in {".yml", ".yaml"} or not path.is_file():
+            continue
+        if not mentions_filename(workflows_readme, path.name):
+            gaps.append(f"workflows/README.md does not mention workflows/{path.name}")
+    skills_readme = (root / "skills" / "README.md").read_text(encoding="utf-8") if (root / "skills" / "README.md").is_file() else ""
+    for skill in sorted((root / "skills").glob("*/SKILL.md")):
+        name = skill.parent.name
+        if f"`{name}`" not in skills_readme and not mentions_filename(skills_readme, f"{name}/SKILL.md"):
+            gaps.append(f"skills/README.md does not mention the {name} skill")
+    provider_docs = "".join(
+        (root / relative).read_text(encoding="utf-8")
+        for relative in ("docs/providers/README.md", "docs/proof/control-setup.md", "workflows/README.md")
+        if (root / relative).is_file()
+    )
+    providers_path = root / "policies" / "provider-config.yaml"
+    if providers_path.is_file():
+        for provider_id, provider in load_json_object(providers_path).get("providers", {}).items():
+            display_name = provider.get("display_name", provider_id)
+            if not mentions_filename(provider_docs, display_name) and f"`{provider_id}`" not in provider_docs:
+                gaps.append(f"provider {provider_id} ({display_name}) is not documented in docs/providers, control setup, or the workflows README")
+    published = documentation_text(root)
+    tooling_paths = []
+    for path in sorted((root / "tooling").rglob("*")):
+        relative = path.relative_to(root)
+        if (not path.is_file()
+                or any(part in {"tests", "fixtures", "__pycache__"} for part in relative.parts)
+                or path.name == "__init__.py"):
+            continue
+        with path.open("rb") as source:
+            has_shebang = source.read(2) == b"#!"
+        if path.suffix not in {".py", ".sh"} and not (path.stat().st_mode & 0o111) and not has_shebang:
+            continue
+        tooling_paths.append(relative)
+    names = [path.name for path in tooling_paths]
+    for relative in tooling_paths:
+        exact_path = re.search(r"(?<![\w./\\-])" + re.escape(relative.as_posix()) + r"(?![\w./\\-])", published) is not None
+        unique_name = (names.count(relative.name) == 1
+                       and re.search(r"(?<![\w./\\-])" + re.escape(relative.name) + r"(?![\w./\\-])", published) is not None)
+        if not exact_path and not unique_name:
+            gaps.append(f"{relative.as_posix()} is not mentioned in any published documentation")
+    return gaps
+
+
+def validate_documentation_coverage() -> None:
+    for gap in documentation_gaps(ROOT):
+        fail(gap)
+
+
 def main() -> int:
     skills = validate_skills()
     controls = validate_control_catalog()
-    validate_guardrail_contract()
+    validate_proof_contract()
     validate_links_and_docs()
     validate_no_machine_paths()
-    print(f"Validated {skills} skills, {controls} controls, guardrail schemas, and documentation")
+    validate_documentation_coverage()
+    print(f"Validated {skills} skills, {controls} controls, Proof schemas, and documentation")
     return 0
 
 

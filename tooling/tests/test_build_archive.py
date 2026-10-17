@@ -79,7 +79,7 @@ class BuildArchiveTests(unittest.TestCase):
         with patch.dict(os.environ, {"AI_TOOLKIT_CACHE": "", "XDG_CACHE_HOME": str(self.root / "xdg")}):
             completed = subprocess.run([sys.executable, str(self.archive), "--version"], text=True, capture_output=True, env=dict(os.environ))
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertTrue((self.root / "xdg" / "ai-toolkit").is_dir())
+        self.assertTrue((self.root / "xdg" / "skrillx").is_dir())
 
     def test_main_builds_and_verifies(self):
         output = self.root / "out" / "skrillx.pyz"

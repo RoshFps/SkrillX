@@ -7,6 +7,7 @@ request cannot change what CI executes.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -16,12 +17,12 @@ from typing import Any
 
 # Capability -> GitHub repository variable the installed workflows read.
 COMMAND_VARIABLES = {
-    "setup": "GUARDRAILS_SETUP_COMMAND",
-    "build": "GUARDRAILS_BUILD_COMMAND",
-    "unit-tests": "GUARDRAILS_UNIT_TEST_COMMAND",
-    "format-and-lint": "GUARDRAILS_FORMAT_LINT_COMMAND",
-    "changed-code-coverage": "GUARDRAILS_CHANGED_COVERAGE_COMMAND",
-    "codeql-languages": "GUARDRAILS_CODEQL_LANGUAGES",
+    "setup": "PROOF_SETUP_COMMAND",
+    "build": "PROOF_BUILD_COMMAND",
+    "unit-tests": "PROOF_UNIT_TEST_COMMAND",
+    "format-and-lint": "PROOF_FORMAT_LINT_COMMAND",
+    "changed-code-coverage": "PROOF_CHANGED_COVERAGE_COMMAND",
+    "codeql-languages": "PROOF_CODEQL_LANGUAGES",
 }
 
 # Existing workflow content that identifies an integration already present.
@@ -71,6 +72,41 @@ def _command(value: str, source: str) -> dict[str, str]:
     return {"command": value, "source": source}
 
 
+def _has_unittest_cases(path: Path) -> bool:
+    """Recognize explicit test cases without importing candidate code or guessing."""
+    try:
+        tree = ast.parse(_read_text(path))
+    except SyntaxError:
+        return False
+    modules: set[str] = set()
+    classes: set[str] = set()
+    case_names = {"TestCase", "IsolatedAsyncioTestCase"}
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            modules.update(alias.asname or alias.name for alias in node.names if alias.name == "unittest")
+        elif isinstance(node, ast.ImportFrom) and node.module == "unittest":
+            classes.update(alias.asname or alias.name for alias in node.names if alias.name in case_names)
+    found = False
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
+            return False
+        if not isinstance(node, ast.ClassDef):
+            continue
+        methods = [child for child in node.body if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name.startswith("test")]
+        if not methods:
+            continue
+        is_case = any(
+            isinstance(base, ast.Name) and base.id in classes
+            or isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name)
+            and base.value.id in modules and base.attr in case_names
+            for base in node.bases
+        )
+        if not is_case:
+            return False
+        found = True
+    return found
+
+
 def detect_python(target: Path) -> dict[str, Any] | None:
     pyproject = target / "pyproject.toml"
     markers = [name for name in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "requirements-dev.txt", "Pipfile", "poetry.lock", "uv.lock")
@@ -84,7 +120,7 @@ def detect_python(target: Path) -> dict[str, Any] | None:
     project = data.get("project", {}) if isinstance(data.get("project"), dict) else {}
     dependency_text = " ".join(
         str(item) for item in project.get("dependencies", []) if isinstance(item, str)
-    ) + " " + json.dumps(project.get("optional-dependencies", {})) + " " + _read_text(target / "requirements-dev.txt") + " " + _read_text(target / "requirements.txt")
+    ) + " " + json.dumps(project.get("optional-dependencies", {})) + " " + json.dumps(data.get("dependency-groups", {})) + " " + _read_text(target / "requirements-dev.txt") + " " + _read_text(target / "requirements.txt")
     package_manager = "pip"
     if "poetry.lock" in markers or "poetry" in tool:
         package_manager = "poetry"
@@ -106,8 +142,15 @@ def detect_python(target: Path) -> dict[str, Any] | None:
     uses_pytest = "pytest" in tool or "pytest" in dependency_text or (target / "pytest.ini").is_file() or (target / "conftest.py").is_file()
     if uses_pytest:
         commands["unit-tests"] = _command("python3 -m pytest", "pytest configuration or dependency")
-    elif any(path.name.startswith("test_") for path in target.rglob("test_*.py") if ".git" not in path.parts):
-        commands["unit-tests"] = _command("python3 -m unittest discover", "test_*.py files")
+    else:
+        test_files = [path for path in target.rglob("test_*.py") if ".git" not in path.parts]
+        reachable = all(
+            (target / parent / "__init__.py").is_file()
+            for path in test_files for parent in path.relative_to(target).parents
+            if parent != Path(".")
+        )
+        if test_files and reachable and all(_has_unittest_cases(path) for path in test_files):
+            commands["unit-tests"] = _command("python3 -m unittest discover", "explicit unittest test cases in test files")
     if "build-system" in data:
         commands["build"] = _command("python3 -m build", "pyproject.toml [build-system]")
     else:
@@ -172,7 +215,7 @@ def detect_workflows(target: Path) -> list[dict[str, Any]]:
         rows.append({
             "path": f".github/workflows/{path.name}",
             "name": name_match.group(1).strip().strip("'\"") if name_match else path.stem,
-            "installer_owned": text.startswith("# Guardrails v2 installer-owned"),
+            "installer_owned": text.startswith("# Proof installer-owned"),
             "integrations": integrations,
         })
     return rows
@@ -208,12 +251,12 @@ def detect_agent_clients(target: Path, environment: dict[str, str] | None = None
 
 
 def detect_toolkit_state(target: Path) -> dict[str, Any]:
-    guardrails = target / ".guardrails"
+    proof_dir = target / ".proof"
     qa_config = [str(path.relative_to(target).as_posix()) for path in target.glob("**/qa/config.yaml")
                  if ".git" not in path.parts and "node_modules" not in path.parts]
     return {
-        "guardrails_installed": (guardrails / "policy.yaml").is_file(),
-        "guardrails_version": _read_json(guardrails / "policy.yaml").get("version") if (guardrails / "policy.yaml").is_file() else None,
+        "proof_installed": (proof_dir / "policy.yaml").is_file(),
+        "proof_version": _read_json(proof_dir / "policy.yaml").get("version") if (proof_dir / "policy.yaml").is_file() else None,
         "toolkit_toml": (target / "toolkit.toml").is_file(),
         "toolkit_lock": (target / "toolkit.lock.json").is_file(),
         "qa_configurations": qa_config,
@@ -282,7 +325,7 @@ def render(discovery: dict[str, Any]) -> str:
     clients = [name for name, row in discovery["agent_clients"].items() if row["detected"]]
     lines.append("Agent clients detected: " + (", ".join(clients) if clients else "none"))
     state = discovery["toolkit"]
-    lines.append("Guardrails installed: " + ("yes" if state["guardrails_installed"] else "no")
+    lines.append("Proof installed: " + ("yes" if state["proof_installed"] else "no")
                  + "; toolkit.toml: " + ("present" if state["toolkit_toml"] else "absent")
                  + "; lock: " + ("present" if state["toolkit_lock"] else "absent"))
     if state["qa_configurations"]:

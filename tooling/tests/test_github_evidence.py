@@ -14,7 +14,7 @@ from unittest.mock import patch
 SCRIPT = Path(__file__).resolve().parents[1] / "github_evidence.py"
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-SPEC = importlib.util.spec_from_file_location("guardrails_v2_github_evidence", SCRIPT)
+SPEC = importlib.util.spec_from_file_location("proof_v2_github_evidence", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(MODULE)
@@ -77,7 +77,7 @@ def check_run(
     return check
 
 
-def artifact_archive(document: dict, member: str = "guardrails-evidence.json") -> bytes:
+def artifact_archive(document: dict, member: str = "proof-evidence.json") -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr(member, json.dumps(document))
@@ -90,7 +90,7 @@ def artifact_contract(
     workflow: str = "Probe",
     workflow_path: str = ".github/workflows/probe.yml",
     external_id_prefix: str = "custom:",
-    artifact_name_prefix: str = "guardrails-probe-",
+    artifact_name_prefix: str = "proof-probe-",
     provider_id: str = "custom-probe",
 ) -> dict:
     return {
@@ -99,7 +99,7 @@ def artifact_contract(
         "workflow_path": workflow_path,
         "external_id_prefix": external_id_prefix,
         "artifact_name_prefix": artifact_name_prefix,
-        "artifact_member": "guardrails-evidence.json",
+        "artifact_member": "proof-evidence.json",
         "provider_id": provider_id,
     }
 
@@ -127,7 +127,7 @@ def run_artifact(
 ) -> dict:
     return {
         "id": artifact_id,
-        "name": name or f"guardrails-probe-{run_id}",
+        "name": name or f"proof-probe-{run_id}",
         "expired": expired,
         "archive_download_url": f"https://api.github.com/repos/owner/repo/actions/artifacts/{artifact_id}/zip",
         "workflow_run": {
@@ -315,6 +315,65 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         result = evidence["results"]["build"]["github-build"]
         self.assertEqual(result["status"], "not_run")
         self.assertIn("duplicate", result["reason"].lower())
+
+    def test_polling_refreshes_completed_checks_once_and_uses_final_snapshot(self) -> None:
+        names = [f"Check {index}" for index in range(15)]
+        expected = {name: {"provider_id": name, "control_ids": [name], "check_name": name,
+                           "app_slug": "github-actions"} for name in names}
+        for final_change in ("unchanged", "duplicate", "failed", "pending", "missing", "api-error"):
+            with self.subTest(final_change=final_change):
+                counts = dict.fromkeys(names, 0)
+
+                def enumerate_checks(repo, revision, token, name):
+                    counts[name] += 1
+                    check = {"name": name, "status": "completed", "conclusion": "success",
+                             "head_sha": "sha", "app": {"slug": "github-actions"}}
+                    if name == names[-1] and counts[name] < 5:
+                        check.update(status="in_progress", conclusion=None)
+                    if name == names[0] and counts[name] > 1:
+                        if final_change == "duplicate":
+                            return [check, dict(check)]
+                        if final_change == "api-error":
+                            error = HTTPError("https://api.github.com", 404, "missing", {}, None)
+                            self.addCleanup(error.close)
+                            raise error
+                        if final_change == "missing":
+                            return []
+                        if final_change == "pending":
+                            check.update(status="in_progress", conclusion=None)
+                        elif final_change == "failed":
+                            check["conclusion"] = "failure"
+                    return [check]
+
+                with patch.object(MODULE, "expected_checks", return_value=expected), \
+                        patch.object(MODULE, "expected_reviews", return_value=[]), \
+                        patch.object(MODULE, "enumerate_check_runs", side_effect=enumerate_checks), \
+                        patch.object(MODULE.time, "monotonic", return_value=0), patch.object(MODULE.time, "sleep"):
+                    result = MODULE.collect_checks("owner/repo", "sha", "token", {}, {}, {},
+                                                   {"providers": {name: {"display_name": name} for name in names}},
+                                                   "change", wait_seconds=50)
+                self.assertEqual([counts[name] for name in names[:-1]], [2] * 14)
+                self.assertEqual(counts[names[-1]], 6)
+                status = result["results"][names[0]][names[0]]["status"]
+                self.assertEqual(status, {"unchanged": "passed", "failed": "failed"}.get(final_change, "not_run"))
+
+    def test_final_refresh_does_not_restart_expired_wait(self) -> None:
+        policy, profiles, catalog, providers = contracts()
+
+        def pending(repo, revision, token, name):
+            return [check_run(name, 201, status="in_progress", conclusion=None,
+                              app_slug="external-build" if name == "External Build" else "github-actions")]
+
+        with patch.object(MODULE, "enumerate_check_runs", side_effect=pending) as enumerate_checks, \
+                patch.object(MODULE.time, "monotonic", side_effect=[0, 0, 30]), \
+                patch.object(MODULE.time, "sleep") as sleep:
+            evidence = MODULE.collect_checks(
+                "owner/repo", "abc123", "token", policy, profiles, catalog, providers, "change", wait_seconds=30
+            )
+        sleep.assert_called_once_with(10)
+        # Two polling snapshots plus one final refresh, with two selected names.
+        self.assertEqual(enumerate_checks.call_count, 6)
+        self.assertEqual(evidence["results"]["build"]["github-build"]["status"], "not_run")
 
     def test_duplicate_matching_check_name_is_not_run(self) -> None:
         payload = {"check_runs": [
@@ -636,8 +695,8 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         policy, profiles, catalog, providers = contracts()
         check = providers["providers"]["github-build"]["checks"]["build"]
         check["external_id_prefix"] = "custom-probe:"
-        check["artifact_name_prefix"] = "guardrails-build-"
-        check["artifact_member"] = "guardrails-evidence.json"
+        check["artifact_name_prefix"] = "proof-build-"
+        check["artifact_member"] = "proof-evidence.json"
 
         expected = MODULE.expected_checks(
             policy, profiles, catalog, providers, "change"
@@ -659,7 +718,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         policy, profiles, catalog, providers = contracts()
         providers["providers"]["github-build"]["checks"]["build"]["trusted_paths"] = [
             ".github/workflows/build.yml",
-            ".guardrails/validators/validate_repository.py",
+            ".proof/validators/validate_repository.py",
         ]
 
         expected = MODULE.expected_checks(
@@ -670,7 +729,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
             expected["Build"]["trusted_paths"],
             [
                 ".github/workflows/build.yml",
-                ".guardrails/validators/validate_repository.py",
+                ".proof/validators/validate_repository.py",
             ],
         )
 
@@ -687,15 +746,15 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         policy, profiles, catalog, providers = contracts()
         check = providers["providers"]["github-build"]["checks"]["build"]
         check["external_id_prefix"] = "custom-probe:"
-        check["artifact_name_prefix"] = "guardrails-build-"
-        check["artifact_member"] = "guardrails-evidence.json"
+        check["artifact_name_prefix"] = "proof-build-"
+        check["artifact_member"] = "proof-evidence.json"
 
         expected = MODULE.expected_checks(
             policy, profiles, catalog, providers, "change"
         )
 
-        self.assertEqual(expected["Build"]["artifact_name_prefix"], "guardrails-build-")
-        self.assertEqual(expected["Build"]["artifact_member"], "guardrails-evidence.json")
+        self.assertEqual(expected["Build"]["artifact_name_prefix"], "proof-build-")
+        self.assertEqual(expected["Build"]["artifact_member"], "proof-evidence.json")
 
     def test_collector_rejects_non_git_commit_subjects(self) -> None:
         policy, profiles, catalog, providers = contracts()
@@ -748,8 +807,8 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
             (
                 "GitHub Secret Scan",
                 "Secret Scan",
-                "guardrails:secret-protection:",
-                "guardrails-secret-protection-",
+                "proof:secret-protection:",
+                "proof-secret-protection-",
                 "github-secret-protection",
                 ".github/workflows/github-secret-protection.yml",
                 901,
@@ -766,8 +825,8 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
             (
                 "Dependabot Verification",
                 "Dependabot Verification",
-                "guardrails:dependabot:",
-                "guardrails-dependabot-",
+                "proof:dependabot:",
+                "proof-dependabot-",
                 "github-dependabot",
                 ".github/workflows/dependabot-verification.yml",
                 902,
@@ -803,7 +862,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
                         "workflow_path": workflow_path,
                         "external_id_prefix": prefix,
                         "artifact_name_prefix": artifact_prefix,
-                        "artifact_member": "guardrails-evidence.json",
+                        "artifact_member": "proof-evidence.json",
                         "provider_id": provider_id,
                     },
                     {
@@ -869,7 +928,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         self.assertIn("artifact contract", result["reason"].lower())
 
     def test_custom_check_does_not_require_impossible_cross_event_suite_binding(self) -> None:
-        artifact = run_artifact(905, name="guardrails-probe-905")
+        artifact = run_artifact(905, name="proof-probe-905")
         with patch.object(
             MODULE,
             "_request",
@@ -899,8 +958,8 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
                     "workflow": "Probe",
                     "workflow_path": ".github/workflows/probe.yml",
                     "external_id_prefix": "custom:",
-                    "artifact_name_prefix": "guardrails-probe-",
-                    "artifact_member": "guardrails-evidence.json",
+                    "artifact_name_prefix": "proof-probe-",
+                    "artifact_member": "proof-evidence.json",
                     "provider_id": "custom-probe",
                 },
                 {**check_run("Probe", 905), "external_id": "custom:905:abc123"},
@@ -1125,7 +1184,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
                     "workflow_path": ".github/workflows/probe.yml",
                     "trusted_paths": [
                         ".github/workflows/probe.yml",
-                        ".guardrails/validators/validate_repository.py",
+                        ".proof/validators/validate_repository.py",
                     ],
                 },
                 check_run("Probe", 908),
@@ -1166,7 +1225,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
                     "workflow_path": ".github/workflows/probe.yml",
                     "trusted_paths": [
                         ".github/workflows/probe.yml",
-                        ".guardrails/validators/validate_repository.py",
+                        ".proof/validators/validate_repository.py",
                     ],
                 },
                 check_run("Probe", 908),
@@ -1208,7 +1267,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
                     "workflow": "Probe",
                     "workflow_path": ".github/workflows/probe.yml",
                     "trusted_paths": [
-                        ".guardrails/validators/validate_repository.py",
+                        ".proof/validators/validate_repository.py",
                     ],
                 },
                 check_run("Probe", 908),
@@ -1351,7 +1410,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         details_url: str | None = None,
         artifacts: list[dict] | None = None,
         document: dict | None = None,
-        member: str = "guardrails-evidence.json",
+        member: str = "proof-evidence.json",
         contract: dict | None = None,
     ) -> dict:
         selected_contract = contract or artifact_contract()
@@ -1383,6 +1442,50 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
                 trusted_base_revision="base456",
                 trusted_workflow_ref="refs/heads/main",
             )
+
+    def test_scope_artifact_preserves_validated_measurements(self) -> None:
+        metrics = {
+            "files": 1, "added_lines": 84, "changed_lines": 84,
+            "max_added_lines_per_file": 84, "binary_files": 0,
+            "total_files": 2, "total_added_lines": 92, "total_changed_lines": 92,
+            "excluded_files": 1, "excluded_added_lines": 8,
+            "excluded_changed_lines": 8, "excluded_binary_files": 0,
+        }
+        thresholds = {"max_files": 12, "max_added_lines": 300,
+                      "max_changed_lines": 500, "max_added_lines_per_file": 150}
+        document = artifact_document(909, provider_id="repository-change-scope")
+        document.update(metrics=metrics, thresholds=thresholds)
+        contract = artifact_contract(provider_id="repository-change-scope")
+        result = self.prove_artifact(document=document, contract=contract)
+        self.assertEqual(result["change_scope"], {
+            "version": 1, "metrics": metrics, "thresholds": thresholds,
+        })
+        for invalid in (None, {**metrics, "files": True}, {**metrics, "files": -1}):
+            with self.subTest(invalid=invalid):
+                document["metrics"] = invalid
+                result = self.prove_artifact(document=document, contract=contract)
+                self.assertEqual(result["status"], "passed")
+                self.assertNotIn("change_scope", result)
+
+    def test_pr_metadata_artifact_preserves_validated_detail(self) -> None:
+        detail = {"version": 1, "title_matches": True, "required_sections": 3, "missing_sections": 0}
+        document = artifact_document(909, provider_id="repository-pr-metadata")
+        document["pr_metadata"] = detail
+        contract = artifact_contract(provider_id="repository-pr-metadata")
+        result = self.prove_artifact(document=document, contract=contract)
+        self.assertEqual(result["pr_metadata"], detail)
+        for invalid in (None, {**detail, "missing_sections": 1}, {**detail, "title_matches": 1}, "text"):
+            with self.subTest(invalid=invalid):
+                document["pr_metadata"] = invalid
+                result = self.prove_artifact(document=document, contract=contract)
+                self.assertEqual(result["status"], "passed")
+                self.assertNotIn("pr_metadata", result)
+        del document["pr_metadata"]
+        self.assertNotIn("pr_metadata", self.prove_artifact(document=document, contract=contract))
+        # Only the PR metadata provider may attach this detail.
+        document = artifact_document(909)
+        document["pr_metadata"] = detail
+        self.assertNotIn("pr_metadata", self.prove_artifact(document=document))
 
     def test_artifact_check_uses_run_id_from_external_id_when_github_rewrites_details_url(self) -> None:
         result = self.prove_artifact(
@@ -1428,7 +1531,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         run_id = 910
         forged_check = {
             **check_run("GitHub Secret Scan", run_id),
-            "external_id": f"guardrails:secret-protection:{run_id}:abc123",
+            "external_id": f"proof:secret-protection:{run_id}:abc123",
         }
         def request(url: str, token: str) -> dict:
             if "check-runs" in url:
@@ -1441,7 +1544,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
                     workflow="Secret Scan",
                     path=".github/workflows/github-secret-protection.yml@refs/heads/main",
                 )
-            if url.endswith(f"/actions/runs/{run_id}/artifacts?name=guardrails-secret-protection-{run_id}&per_page=100"):
+            if url.endswith(f"/actions/runs/{run_id}/artifacts?name=proof-secret-protection-{run_id}&per_page=100"):
                 return {"total_count": 0, "artifacts": []}
             raise AssertionError(f"unexpected request: {url}")
 
@@ -1587,9 +1690,9 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
     def test_wrong_member_revision_provider_or_status_is_not_trusted(self) -> None:
         cases = (
             ("member", artifact_document(909), "forged.json"),
-            ("head", artifact_document(909, revision="other"), "guardrails-evidence.json"),
-            ("provider", artifact_document(909, provider_id="forged"), "guardrails-evidence.json"),
-            ("status", artifact_document(909, status="blocked"), "guardrails-evidence.json"),
+            ("head", artifact_document(909, revision="other"), "proof-evidence.json"),
+            ("provider", artifact_document(909, provider_id="forged"), "proof-evidence.json"),
+            ("status", artifact_document(909, status="unknown"), "proof-evidence.json"),
         )
         for label, document, member in cases:
             with self.subTest(label=label):
@@ -1615,6 +1718,7 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         for artifact_status, expected in (
             ("passed", "passed"),
             ("failed", "failed"),
+            ("blocked", "blocked"),
             ("not_run", "not_run"),
         ):
             with self.subTest(status=artifact_status):
@@ -1654,6 +1758,227 @@ class GitHubEvidenceV2Tests(unittest.TestCase):
         self.assertLessEqual(len(result["producer"]), 200)
         self.assertLessEqual(len(result["reason"]), 1000)
         self.assertLessEqual(len(result["evidence"][0]), 1000)
+
+
+class CheckExecutionMetadataTests(unittest.TestCase):
+    def check(self) -> dict:
+        return {**check_run("Build", 1), "started_at": "2026-09-26T12:00:00Z",
+                "completed_at": "2026-09-26T12:01:02.900000Z"}
+
+    def test_completed_check_retains_timing_and_conclusion(self) -> None:
+        for conclusion, status in MODULE.CONCLUSIONS.items():
+            with self.subTest(conclusion=conclusion):
+                check = {**self.check(), "conclusion": conclusion}
+                result = MODULE.check_run_evidence("build", "Build", check)
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result["check_execution"], {
+                    "version": 1, "started_at": check["started_at"],
+                    "completed_at": check["completed_at"], "duration_seconds": 62,
+                    "conclusion": conclusion,
+                })
+
+    def test_unusable_optional_metadata_does_not_change_result(self) -> None:
+        baseline = MODULE.check_run_evidence("build", "Build", check_run("Build", 1))
+        for overrides in (
+            {"started_at": None}, {"started_at": 123}, {"completed_at": "bogus"},
+            {"completed_at": "2026-09-26T11:00:00Z"},
+            {"started_at": "2026-09-26T12:00:00"},
+            {"completed_at": "2026-09-31T12:00:00Z"},
+            {"status": "in_progress"},
+        ):
+            with self.subTest(overrides=overrides):
+                result = MODULE.check_run_evidence("build", "Build", {**self.check(), **overrides})
+                self.assertEqual(result, baseline)
+
+
+class SelfReportedMeasurementsTests(unittest.TestCase):
+    CONTRACT = {"check_name": "Unit Tests", "workflow": "Unit Tests", "provider_id": "repository-unit-tests",
+                "workflow_path": ".github/workflows/unit-tests.yml", "control_ids": ["unit-tests"],
+                "measurements_artifact_prefix": "proof-measurements-", "measurements_member": "proof-measurements.json"}
+    MEASUREMENTS = {"version": 1, "source": "pull-request-workflow",
+                    "tests": {"total": 10, "passed": 9, "failed": 0, "skipped": 1}}
+
+    def document(self, **overrides: object) -> dict:
+        return {"version": 1, "run_id": 55, "run_attempt": 2, "repository": "owner/repo", "head_sha": "abc123",
+                "control": "unit-tests", "measurements": copy.deepcopy(self.MEASUREMENTS), **overrides}
+
+    def fetch(self, document: dict, *, listing: dict | None = None, status: str = "passed",
+              contract: dict | None = None, job: dict | None = None, check: dict | None = None) -> object:
+        listing = listing or {"total_count": 1, "artifacts": [
+            {"id": 9, "name": "proof-measurements-55-2", "expired": False, "workflow_run": {"id": 55}}]}
+        job = job or {"id": 1, "run_id": 55, "run_attempt": 2, "head_sha": "abc123"}
+        requested: list[str] = []
+
+        def request(url: str, token: str) -> dict:
+            requested.append(url)
+            return job if "/actions/jobs/" in url else listing
+
+        with mock.patch.object(MODULE, "_request", side_effect=request), \
+                mock.patch.object(MODULE, "_request_bytes", return_value=artifact_archive(document, "proof-measurements.json")):
+            result = MODULE.self_reported_measurements(
+                "owner/repo", "abc123", "token", 55, contract or self.CONTRACT, "unit-tests", status,
+                check or check_run("Unit Tests", 55))
+        self.requested = requested
+        return result
+
+    def test_bound_valid_measurements_are_returned(self) -> None:
+        self.assertEqual(self.fetch(self.document()), self.MEASUREMENTS)
+        self.assertIn("name=proof-measurements-55-2&", self.requested[1])
+
+    def test_measurements_bind_to_the_checks_own_attempt(self) -> None:
+        # A re-run keeps the run ID; an earlier attempt's artifact must not be used.
+        self.assertIsNone(self.fetch(self.document(run_attempt=1)))
+        stale = {"total_count": 1, "artifacts": [
+            {"id": 9, "name": "proof-measurements-55-1", "expired": False, "workflow_run": {"id": 55}}]}
+        self.assertIsNone(self.fetch(self.document(run_attempt=1), listing=stale))
+        for job in ({"run_id": 56, "run_attempt": 2, "head_sha": "abc123"},
+                    {"run_id": 55, "run_attempt": 2, "head_sha": "other"},
+                    {"run_id": 55, "run_attempt": True, "head_sha": "abc123"},
+                    {"run_id": 55, "run_attempt": 0, "head_sha": "abc123"}):
+            with self.subTest(job=job):
+                self.assertIsNone(self.fetch(self.document(), job=job))
+        for url in ("https://github.com/owner/repo/actions/runs/55", "https://github.com/owner/repo/actions/runs/54/job/1"):
+            with self.subTest(url=url):
+                self.assertIsNone(self.fetch(self.document(), check={**check_run("Unit Tests", 55), "details_url": url}))
+
+    def test_unbound_or_inconsistent_measurements_are_dropped(self) -> None:
+        bad_tests = {**self.MEASUREMENTS, "tests": {"total": 10, "passed": 8, "failed": 1, "skipped": 1}}
+        for overrides in ({"run_id": 56}, {"head_sha": "other"}, {"repository": "owner/other"},
+                          {"control": "changed-code-coverage"}, {"version": 2}, {"extra": True},
+                          {"measurements": bad_tests}, {"measurements": {**self.MEASUREMENTS, "source": "trusted"}}):
+            with self.subTest(overrides=overrides):
+                self.assertIsNone(self.fetch(self.document(**overrides)))
+        self.assertEqual(self.fetch(self.document(measurements=bad_tests), status="failed"), bad_tests)
+
+    def test_scanner_findings_are_returned_for_either_result(self) -> None:
+        findings = {"version": 1, "source": "pull-request-workflow",
+                    "findings": {"total": 3, "critical": 0, "high": 0, "medium": 0, "low": 0, "unrated": 3}}
+        contract = {**self.CONTRACT, "check_name": "Gitleaks", "workflow": "Gitleaks", "provider_id": "gitleaks",
+                    "workflow_path": ".github/workflows/gitleaks.yml", "control_ids": ["secret-detection"]}
+        job = {"id": 1, "run_id": 55, "run_attempt": 2, "head_sha": "abc123"}
+        listing = {"total_count": 1, "artifacts": [
+            {"id": 9, "name": "proof-measurements-55-2", "expired": False, "workflow_run": {"id": 55}}]}
+
+        def fetch(measurements: dict, status: str) -> object:
+            archive = artifact_archive(self.document(control="secret-detection", measurements=measurements),
+                                       "proof-measurements.json")
+            with mock.patch.object(MODULE, "_request", side_effect=lambda url, token: job if "/actions/jobs/" in url else listing), \
+                    mock.patch.object(MODULE, "_request_bytes", return_value=archive):
+                return MODULE.self_reported_measurements(
+                    "owner/repo", "abc123", "token", 55, contract, "secret-detection", status, check_run("Gitleaks", 55))
+
+        for status in ("passed", "failed"):
+            with self.subTest(status=status):
+                self.assertEqual(fetch(findings, status), findings)
+        # Counts that do not add up are dropped rather than displayed.
+        self.assertIsNone(fetch({**findings, "findings": {**findings["findings"], "total": 4}}, "failed"))
+
+    def test_scanner_contracts_opt_in_to_measurements_for_one_control(self) -> None:
+        config = json.loads((ROOT / "policies/provider-config.yaml").read_text(encoding="utf-8"))
+        for provider_id, control_id in (("semgrep-ce", "custom-static-analysis"), ("gitleaks", "secret-detection")):
+            with self.subTest(provider_id=provider_id):
+                check = config["providers"][provider_id]["checks"][control_id]
+                self.assertEqual(check["measurements_artifact_prefix"], "proof-measurements-")
+                self.assertEqual(check["measurements_member"], "proof-measurements.json")
+                self.assertEqual(config["providers"][provider_id]["capabilities"], [control_id])
+
+    def test_missing_expired_duplicate_or_foreign_artifacts_are_dropped(self) -> None:
+        artifact = {"id": 9, "name": "proof-measurements-55-2", "expired": False, "workflow_run": {"id": 55}}
+        for listing in ({"total_count": 0, "artifacts": []},
+                        {"total_count": 2, "artifacts": [artifact, artifact]},
+                        {"total_count": 1, "artifacts": [{**artifact, "expired": True}]},
+                        {"total_count": 1, "artifacts": [{**artifact, "workflow_run": {"id": 1}}]},
+                        {"total_count": 1, "artifacts": [{**artifact, "name": "proof-measurements-55"}]}):
+            with self.subTest(listing=listing):
+                self.assertIsNone(self.fetch(self.document(), listing=listing))
+
+    def test_no_contract_or_non_result_status_skips_fetching(self) -> None:
+        with mock.patch.object(MODULE, "_request", side_effect=AssertionError("no fetch expected")):
+            contract = {key: value for key, value in self.CONTRACT.items() if not key.startswith("measurements")}
+            self.assertIsNone(MODULE.self_reported_measurements(
+                "owner/repo", "abc123", "token", 55, contract, "unit-tests", "passed"))
+            self.assertIsNone(MODULE.self_reported_measurements(
+                "owner/repo", "abc123", "token", 55, self.CONTRACT, "unit-tests", "not_run"))
+
+    def test_download_errors_leave_the_check_result_unchanged(self) -> None:
+        with mock.patch.object(MODULE, "_request", side_effect=OSError("offline")):
+            self.assertIsNone(MODULE.self_reported_measurements(
+                "owner/repo", "abc123", "token", 55, self.CONTRACT, "unit-tests", "passed"))
+
+    def test_credentialed_provider_checks_are_artifact_backed_with_per_provider_names(self) -> None:
+        policy, profiles, catalog, providers = contracts()
+        controls = {"ai-engineering-review": "ai-engineering-adapter", "ai-qa-review": "ai-qa-adapter",
+                    "ai-security-review": "ai-security-adapter",
+                    "ai-repository-standards-review": "ai-repository-standards-adapter",
+                    "deep-sast": "snyk-code", "dependency-vulnerability": "snyk-open-source",
+                    "license-compliance": "fossa"}
+        for control_id in controls:
+            policy["overrides"]["change"][control_id] = "advisory"
+        providers["selections"]["ai-engineering-review"] = {"authoritative": "ai-engineering-adapter", "supplemental": []}
+        providers["selections"]["deep-sast"] = {"authoritative": "snyk-code", "supplemental": []}
+        expected = MODULE.expected_checks(policy, profiles, catalog, providers, "change")
+        workflows = {path: (ROOT / "workflows" / path).read_text(encoding="utf-8")
+                     for path in ("ai-pr-review.yml", "snyk.yml", "fossa.yml")}
+        for control_id, provider_id in controls.items():
+            with self.subTest(control_id=control_id):
+                contract = next(contract for contract in expected.values() if control_id in contract["control_ids"])
+                self.assertEqual(contract["provider_id"], provider_id)
+                self.assertEqual(contract["external_id_prefix"], f"proof:{provider_id}:")
+                self.assertEqual(contract["artifact_name_prefix"], f"proof-{provider_id}-")
+                self.assertNotIn("measurements_artifact_prefix", contract)
+                workflow = workflows[contract["workflow_path"].rsplit("/", 1)[1]]
+                self.assertIn(f"name: proof-{provider_id}-${{{{ github.run_id }}}}", workflow)
+                self.assertIn(f"PROVIDER_ID: {provider_id}\n", workflow)
+
+    def test_run_bound_artifact_attaches_counts_for_its_single_control(self) -> None:
+        counts = {"version": 1, "source": "pull-request-workflow",
+                  "review_findings": {"total": 2, "p0": 0, "p1": 1, "p2": 1, "p3": 0, "unresolved_blocking": 1}}
+        contract = {**artifact_contract(provider_id="ai-qa-adapter"), "control_ids": ["ai-qa-review"]}
+        prover = GitHubEvidenceV2Tests.prove_artifact
+        cases = (
+            ("matching", {"control": "ai-qa-review", "measurements": counts}, "failed", counts),
+            ("other control", {"control": "ai-security-review", "measurements": counts}, "failed", None),
+            ("invalid counts", {"control": "ai-qa-review", "measurements": {**counts, "source": "x"}}, "failed", None),
+            ("not a result", {"control": "ai-qa-review", "measurements": counts}, "blocked", None),
+        )
+        for label, extra, status, expected in cases:
+            with self.subTest(label=label):
+                document = {**artifact_document(909, provider_id="ai-qa-adapter", status=status), **extra}
+                result = prover(self, document=document, contract=contract)
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result.get("measurements"), expected)
+        two_controls = {**contract, "control_ids": ["ai-qa-review", "ai-security-review"]}
+        result = prover(self, document={**artifact_document(909, provider_id="ai-qa-adapter"),
+                                        "control": "ai-qa-review", "measurements": {**counts, "review_findings": {
+                                            **counts["review_findings"], "p1": 0, "unresolved_blocking": 0}}},
+                        contract=two_controls)
+        self.assertNotIn("measurements", result)
+
+    def test_artifact_backed_check_must_be_completed(self) -> None:
+        result = MODULE.proven_check_evidence(
+            "owner/repo", "abc123", "token", artifact_contract(),
+            {**check_run("Probe", 909, status="in_progress", conclusion=None), "external_id": "custom:909:abc123"},
+            "Custom Probe", trusted_base_revision="base456", trusted_workflow_ref="refs/heads/main",
+        )
+        self.assertEqual(result["status"], "not_run")
+        self.assertIn("not completed", result["reason"])
+
+    def test_proven_check_attaches_measurements_without_changing_status(self) -> None:
+        check = check_run("Unit Tests", 55)
+        run = {"id": 55, "name": "Unit Tests", "path": ".github/workflows/unit-tests.yml", "event": "pull_request",
+               "head_sha": "abc123", "check_suite_id": 55 + 10_000,
+               "pull_requests": [{"number": 17, "head": {"sha": "abc123"}}]}
+        baseline = MODULE.check_run_evidence("Unit Tests", "Repository Unit Test Command", check)
+        for measurements in (self.MEASUREMENTS, None):
+            with self.subTest(measurements=measurements), \
+                    mock.patch.object(MODULE, "_request", return_value=run), \
+                    mock.patch.object(MODULE, "trusted_paths_match_trusted_base", return_value=True), \
+                    mock.patch.object(MODULE, "self_reported_measurements", return_value=measurements):
+                result = MODULE.proven_check_evidence(
+                    "owner/repo", "abc123", "token", self.CONTRACT, check, "Repository Unit Test Command",
+                    trusted_base_revision="base456", trusted_workflow_ref="refs/heads/main")
+                expected = {**baseline, "measurements": measurements} if measurements else baseline
+                self.assertEqual(result, expected)
 
 
 if __name__ == "__main__":

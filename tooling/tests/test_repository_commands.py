@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import subprocess
 import sys
@@ -22,16 +23,36 @@ class RepositoryCommandTests(unittest.TestCase):
             ["bash", path], cwd=ROOT, env=environment, text=True, capture_output=True, check=False
         )
 
-    def run_migration_validator(self, root: Path) -> tuple[int, str, str]:
+    def run_migration_validator(self, root: Path, measurements: Path | None = None) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
+        environment = {key: value for key, value in os.environ.items() if key != "PROOF_MEASUREMENTS_FILE"}
+        if measurements is not None:
+            environment["PROOF_MEASUREMENTS_FILE"] = str(measurements)
         with (
+            patch.dict(os.environ, environment, clear=True),
             patch.object(sys, "argv", ["validate_no_migrations.py", "--root", str(root)]),
             contextlib.redirect_stdout(stdout),
             contextlib.redirect_stderr(stderr),
         ):
             status = validate_no_migrations.main()
         return status, stdout.getvalue(), stderr.getvalue()
+
+    def test_migration_validator_records_surfaces_as_checked_and_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "measurements.json"
+            status, _, _ = self.run_migration_validator(root, output)
+            self.assertEqual(status, 0)
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")),
+                             {"version": 1, "source": "pull-request-workflow",
+                              "migrations": {"checked": 0, "failed": 0}})
+            (root / "db" / "migrate").mkdir(parents=True)
+            (root / "prisma" / "migrations").mkdir(parents=True)
+            status, _, _ = self.run_migration_validator(root, output)
+            self.assertEqual(status, 1)
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["migrations"],
+                             {"checked": 2, "failed": 2})
 
     def test_build_compiles_python_without_writing_bytecode_into_repository(self) -> None:
         before = set(ROOT.rglob("*.pyc"))
@@ -43,12 +64,12 @@ class RepositoryCommandTests(unittest.TestCase):
 
     def test_changed_code_coverage_requires_an_exact_comparison_base(self) -> None:
         environment = os.environ.copy()
-        environment.pop("GUARDRAILS_COVERAGE_BASE_REF", None)
+        environment.pop("PROOF_COVERAGE_BASE_REF", None)
 
         completed = self.run_script("tooling/changed_code_coverage.sh", environment)
 
         self.assertEqual(completed.returncode, 2)
-        self.assertIn("GUARDRAILS_COVERAGE_BASE_REF", completed.stderr)
+        self.assertIn("PROOF_COVERAGE_BASE_REF", completed.stderr)
 
     def test_changed_code_coverage_uses_supported_diff_cover_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -85,7 +106,7 @@ class RepositoryCommandTests(unittest.TestCase):
             environment = os.environ.copy()
             environment.pop("GITHUB_STEP_SUMMARY", None)
             environment["PATH"] = f"{binary_directory}:/usr/bin:/bin"
-            environment["GUARDRAILS_COVERAGE_BASE_REF"] = "base-sha"
+            environment["PROOF_COVERAGE_BASE_REF"] = "base-sha"
             inherited_coverage_file = binary_directory / "outer.coverage"
             inherited_coverage_file.write_text("outer coverage data", encoding="utf-8")
             environment["COVERAGE_FILE"] = str(inherited_coverage_file)
@@ -103,7 +124,7 @@ class RepositoryCommandTests(unittest.TestCase):
             self.assertIn("patch = subprocess", coverage_config)
             self.assertIn("parallel = true", coverage_config)
             self.assertIn("*/tooling/coverage-support/*", coverage_config)
-            for source_directory in ("guardrails", "tooling", "examples/python-demo", "skills", "security"):
+            for source_directory in ("proof", "tooling", "examples/python-demo", "skills", "security"):
                 self.assertIn(f"    {source_directory}\n", coverage_config)
             self.assertIn("combine --quiet", arguments)
             self.assertIn("tooling/coverage-support", (ROOT / "tooling/changed_code_coverage.sh").read_text())

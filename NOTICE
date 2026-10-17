@@ -1,8 +1,11 @@
 SkrillX
 Copyright 2026 Roshan Immanuel.
 
+SkrillX is a fork of "AI Software Toolkit" (https://github.com/ravisingh11/ai-software-toolkit),
+Copyright 2026 Ravi Singh, distributed under the MIT License (see LICENSE).
+
 This repository includes reusable engineering standards, machine-readable
-guardrails, validators, workflows, templates, prompts, and agent skills.
+Proof policy, validators, workflows, templates, prompts, and agent skills.
 
 The MIT License does not grant permission to use contributor trade names,
 trademarks, service marks, product names, organization names, logos, or

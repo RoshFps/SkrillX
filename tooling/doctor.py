@@ -17,7 +17,7 @@ from pathlib import Path
 def trusted_module(source: str, installed: str):
     """Load this distribution's helpers, never executable code from --target."""
     here = Path(__file__).resolve()
-    path = here.parent / installed if here.parent.name == ".guardrails" else here.parents[1] / source
+    path = here.parent / installed if here.parent.name == ".proof" else here.parents[1] / source
     previous = sys.dont_write_bytecode
     try:
         sys.dont_write_bytecode = True
@@ -105,15 +105,16 @@ def github_setup(target: Path, repository: str, selected: dict, providers: dict,
 
     variables = collection("/actions/variables", "variables")
     secrets = collection("/actions/secrets", "secrets")
-    selected_providers = {entry["authoritative"] for entry in selected.values()}
+    selected_providers = {provider_id for entry in selected.values()
+                          for provider_id in [entry["authoritative"], *entry.get("supplemental", [])]}
     needed_variables = {command[0]: None for control, command in producer.COMMAND_PRODUCERS.items()
                         if control in selected and command[1] == selected[control]["authoritative"]}
     if "github-codeql" in selected_providers:
-        needed_variables["GUARDRAILS_CODEQL_LANGUAGES"] = None
+        needed_variables["PROOF_CODEQL_LANGUAGES"] = None
     if "github-dependency-review" in selected_providers:
-        needed_variables["GUARDRAILS_DEPENDENCY_REVIEW_ENABLED"] = "true"
+        needed_variables["PROOF_DEPENDENCY_REVIEW_ENABLED"] = "true"
     if "github-artifact-attestations" in selected_providers:
-        needed_variables["GUARDRAILS_ARTIFACT_PATH"] = None
+        needed_variables["PROOF_ARTIFACT_PATH"] = None
     for name, expected in sorted(needed_variables.items()):
         value = variables.get(name) if variables is not None else None
         status = "unverified" if value is None else "configured" if isinstance(value, str) and value.strip() and (expected is None or value == expected) else "action_needed"
@@ -122,7 +123,12 @@ def github_setup(target: Path, repository: str, selected: dict, providers: dict,
             else "Repository-level variable is empty or not enabled." if status == "action_needed"
             else "Repository-level variable was not found or could not be read; inherited values were not queried.",
             f"Verify effective Actions variable {name}" + (f"={expected}" if expected else "") + "; run the corresponding workflow.")
-    for name in sorted({name for provider_id in selected_providers for name in providers[provider_id].get("secrets", [])}):
+    environment_names = {name for provider_id in selected_providers & set(ENVIRONMENT_PROVIDERS)
+                         for name in declared_names(providers[provider_id])}
+    if environment_names:
+        rows.extend(provider_environment_rows(api, collection, environment_names, secrets))
+    for name in sorted({name for provider_id in selected_providers for name in declared_names(providers[provider_id])}
+                       - environment_names):
         present = secrets is not None and name in secrets
         add(f"github.secret.{name}", "configured" if present else "unverified",
             "Repository-level secret name exists; its value, validity, permissions, and workflow availability are unverified." if present
@@ -140,7 +146,124 @@ def github_setup(target: Path, repository: str, selected: dict, providers: dict,
             else "GitHub did not expose both settings; lack of visibility is not evidence they are disabled.",
             "Inspect repository Settings > Code security; the Secret Scan workflow must verify settings and alerts with SECURITY_SETTINGS_TOKEN.")
     add("github.producer-evidence", "unverified", "Only setup metadata was queried; no check runs, findings, or secret values were collected.",
-        "Open a representative PR and inspect its Guardrail Scorecard; metadata alone cannot satisfy a control.")
+        "Open a representative PR and inspect its Proof Scorecard; metadata alone cannot satisfy a control.")
+    return rows
+
+
+def declared_names(provider: dict) -> list[str]:
+    """Names of the GitHub secrets a provider declares; names only, never values."""
+    return [name for key, value in provider.items() if key == "secrets" and isinstance(value, list)
+            for name in value if isinstance(name, str)]
+
+
+def provider_environment_rows(api, collection, names: set[str], repository_secrets: dict | None) -> list[dict]:
+    """Where the credentialed provider workflows' secrets live, never their values.
+
+    A repository or organization secret is readable by a workflow pushed to any
+    branch, so the provider workflows read theirs from PROVIDER_ENVIRONMENT, whose
+    deployment branches must be limited to the default branch.
+    """
+    rows = []
+
+    def add(identifier, status, message, next_step):
+        rows.append({"id": identifier, "status": status, "message": message, "next_step": next_step})
+
+    environment = api(f"/environments/{PROVIDER_ENVIRONMENT}")
+    policy = environment.get("deployment_branch_policy") if isinstance(environment, dict) else None
+    repository = api()
+    default_branch = repository.get("default_branch") if isinstance(repository, dict) else None
+    if not isinstance(environment, dict) or environment.get("name") != PROVIDER_ENVIRONMENT:
+        status, message = "unverified", "The environment was not found or could not be read."
+    elif policy is None:
+        status, message = "action_needed", "The environment accepts every branch, so any pushed workflow can read its secrets."
+    elif not isinstance(policy, dict) or not isinstance(default_branch, str):
+        status, message = "unverified", "The deployment branch policy or default branch could not be read."
+    elif policy.get("protected_branches") is True:
+        status, message = "configured", "Only protected branches can use the environment; confirm none but the default branch is protected."
+    else:
+        pages = api(f"/environments/{PROVIDER_ENVIRONMENT}/deployment-branch-policies?per_page=100", True)
+        branch_policies = None
+        if isinstance(pages, list) and all(isinstance(page, dict) and isinstance(page.get("branch_policies"), list)
+                                           for page in pages):
+            branch_policies = [item for page in pages for item in page["branch_policies"]]
+        if branch_policies is None or any(not isinstance(item, dict) for item in branch_policies):
+            status, message = "unverified", "The environment's deployment branch policies could not be read."
+        elif branch_policies and all(item.get("name") == default_branch and item.get("type", "branch") == "branch"
+                                     for item in branch_policies):
+            status, message = "configured", f"Only {default_branch} can use the environment."
+        else:
+            status, message = "action_needed", f"The environment's deployment branches are not limited to {default_branch}."
+    add(f"github.environment.{PROVIDER_ENVIRONMENT}", status, message,
+        f"Create the {PROVIDER_ENVIRONMENT} environment with deployment branches limited to the default branch.")
+    stored = collection(f"/environments/{PROVIDER_ENVIRONMENT}/secrets", "secrets")
+    organization = collection("/actions/organization-secrets", "secrets")
+    for name in sorted(names):
+        shared = [scope for scope, found in (("repository", repository_secrets), ("organization", organization))
+                  if found is not None and name in found]
+        if shared:
+            add(f"github.secret.{name}", "action_needed",
+                f"A {' and '.join(shared)} secret {name} is readable by a workflow pushed to any branch.",
+                f"Store {name} only in the {PROVIDER_ENVIRONMENT} environment and delete the {' and '.join(shared)} copy.")
+        elif stored is not None and name in stored:
+            add(f"github.secret.{name}", "configured" if status == "configured" else "unverified",
+                f"{name} is an environment secret of {PROVIDER_ENVIRONMENT}; its value, validity, and permissions are unverified.",
+                f"Open a representative PR and confirm the provider check reports; never put {name} in policy, logs, or this report.")
+        else:
+            add(f"github.secret.{name}", "unverified" if stored is None else "action_needed",
+                f"{name} was not found in the {PROVIDER_ENVIRONMENT} environment" + ("." if stored is not None else ", or it could not be read."),
+                f"Add {name} as a secret of the {PROVIDER_ENVIRONMENT} environment.")
+    return rows
+
+
+ADAPTER_BACKED_PROVIDERS = ("snyk-code", "snyk-open-source", "fossa")
+PROVIDER_ENVIRONMENT = "proof-providers"
+# Providers whose credentialed workflows run on pull_request_target with secrets from PROVIDER_ENVIRONMENT.
+ENVIRONMENT_PROVIDERS = (*ADAPTER_BACKED_PROVIDERS, "ai-engineering-adapter", "ai-qa-adapter", "ai-security-adapter",
+                         "ai-repository-standards-adapter")
+
+
+def adapter_setup(target: Path, selected: dict, providers: dict, environment: dict) -> list[dict]:
+    """Diagnose adapter-backed external providers without running them."""
+    rows: list[dict] = []
+    # Authoritative and supplemental selections both need their workflow and credential.
+    external_providers = {
+        provider_id
+        for selection in selected.values()
+        for provider_id in [selection["authoritative"], *selection.get("supplemental", [])]
+        if providers.get(provider_id, {}).get("activation") == "external"
+    }
+    if not external_providers:
+        return rows
+    try:
+        adapter = trusted_module("tooling/provider_adapter.py", "adapter.py")
+        contracts = adapter.PROVIDERS
+    except ValueError:
+        contracts = None
+    for provider_id in sorted(external_providers):
+        provider = providers[provider_id]
+        # Names of declared GitHub secrets; values are never read or printed.
+        credential_names = declared_names(provider)
+        if provider_id in ADAPTER_BACKED_PROVIDERS and (contracts is None or provider_id not in contracts):
+            rows.append({"id": f"provider.{provider_id}.adapter", "status": "action_needed",
+                         "message": "The installed runtime has no adapter contract for this provider; adapter-owned commands cannot run.",
+                         "next_step": "Run tooling/install.py --target <repo> --refresh-existing from a trusted release."})
+        elif contracts is not None and provider_id in contracts:
+            contract = contracts[provider_id]
+            available = bool(shutil.which(contract["binary"]))
+            rows.append({"id": f"provider.{provider_id}.adapter", "status": "configured",
+                         "message": f"Adapter owns the {contract['binary']} command shape; the CLI is {'on PATH' if available else 'not on PATH'} locally and was not executed.",
+                         "next_step": f"Run .proof/adapter.py {provider_id} locally or the {provider['display_name']} workflow on a PR to produce evidence."})
+        for name in credential_names:
+            present = bool(environment.get(name, "").strip())
+            rows.append({"id": f"local.credential.{name}", "status": "unverified",
+                         "message": f"{name} is {'set' if present else 'unset'} locally; its validity was not checked." ,
+                         "next_step": f"Store {name} as a GitHub secret for CI; export it locally only to run the adapter yourself."})
+        template = provider.get("template")
+        path = next((check.get("workflow_path") for check in provider.get("checks", {}).values() if isinstance(check, dict) and check.get("workflow_path")), None)
+        if template and path and not (target / path).is_file():
+            rows.append({"id": f"provider.{provider_id}.template", "status": "unverified",
+                         "message": f"Template {template} is available but {path} is not installed in this repository.",
+                         "next_step": f"Copy {template} to {path}, add the {', '.join(credential_names) or 'required'} secret, and verify a representative PR."})
     return rows
 
 
@@ -156,18 +279,18 @@ def diagnose(target: Path, *, operation: str = "change", environment: dict | Non
     def add(identifier, status, message, next_step):
         checks.append({"id": identifier, "status": status, "message": message, "next_step": next_step})
 
-    validator = trusted_module("guardrails/validate_repository.py", "validators/validate_repository.py")
-    missing = [name for name in validator.REQUIRED_FILES if not (target / ".guardrails" / name).is_file()]
+    validator = trusted_module("proof/validate_repository.py", "validators/validate_repository.py")
+    missing = [name for name in validator.REQUIRED_FILES if not (target / ".proof" / name).is_file()]
     add("runtime", "action_needed" if missing else "configured",
         "Missing runtime files: " + ", ".join(missing) if missing else "Installed runtime files are present; contents have not been executed.",
         "Run tooling/install.py --target <repo> --refresh-existing from a trusted release." if missing
         else "Use the repository validation check to validate installed contracts.")
 
-    evaluator = trusted_module("guardrails/evaluate.py", "evaluate.py")
-    producer = trusted_module("tooling/produce_guardrail_evidence.py", "produce.py")
+    evaluator = trusted_module("proof/evaluate.py", "evaluate.py")
+    producer = trusted_module("tooling/produce_proof_evidence.py", "produce.py")
     selected, providers = {}, {}
     try:
-        documents = [read_object(target, f".guardrails/{name}.yaml")
+        documents = [read_object(target, f".proof/{name}.yaml")
                      for name in ("policy", "profiles", "control-catalog", "providers")]
         for subject in ("git-commit", "pull-request", "artifact", "environment"):
             active, _, providers = evaluator.effective_controls(*documents, operation, subject)
@@ -181,7 +304,7 @@ def diagnose(target: Path, *, operation: str = "change", environment: dict | Non
     except (OSError, ValueError, KeyError, TypeError):
         selected, providers = {}, {}
         add("configuration", "action_needed", "Installed policy, profiles, catalog, or providers are unreadable or invalid.",
-            "Validate .guardrails/*.yaml with the repository validator; review the policy and provider selections.")
+            "Validate .proof/*.yaml with the repository validator; review the policy and provider selections.")
 
     code, root = git_probe(["rev-parse", "--show-toplevel"], target)
     repository = code == 0 and Path(root).resolve() == target
@@ -207,7 +330,7 @@ def diagnose(target: Path, *, operation: str = "change", environment: dict | Non
 
     if "repository-ground-truth" in selected:
         try:
-            truth = read_object(target, ".guardrails/ground-truth-ai.yaml")
+            truth = read_object(target, ".proof/ground-truth-ai.yaml")
             entries = truth.get("documents")
             valid = truth.get("version") == 1 and isinstance(entries, list) and bool(entries)
             if valid:
@@ -223,14 +346,14 @@ def diagnose(target: Path, *, operation: str = "change", environment: dict | Non
             valid = False
         add("ground-truth", "configured" if valid else "action_needed",
             "Declared documents exist and are nonempty; accuracy still needs review." if valid else "Ground-truth declaration is invalid, empty, or references missing/empty documents.",
-            "Set .guardrails/ground-truth-ai.yaml documents to real repository-relative documentation paths.")
+            "Set .proof/ground-truth-ai.yaml documents to real repository-relative documentation paths.")
 
-    working_directory = environment.get("GUARDRAILS_WORKING_DIRECTORY", ".").strip() or "."
+    working_directory = environment.get("PROOF_WORKING_DIRECTORY", ".").strip() or "."
     working = (target / working_directory).resolve()
     valid_working = working.is_relative_to(target) and working.is_dir()
     add("local.working-directory", "configured" if valid_working else "action_needed",
         "Working directory is inside the repository." if valid_working else "Working directory is missing or escapes the repository.",
-        "Set GUARDRAILS_WORKING_DIRECTORY to an existing repository-relative directory.")
+        "Set PROOF_WORKING_DIRECTORY to an existing repository-relative directory.")
 
     for control_id, selection in sorted(selected.items()):
         provider_id = selection["authoritative"]
@@ -260,6 +383,8 @@ def diagnose(target: Path, *, operation: str = "change", environment: dict | Non
                 "Workflow file present; GitHub execution is not verified." if present else "Workflow file absent; local-only installations may intentionally omit Actions.",
                 "For PR automation, install/configure the selected provider workflow and verify a representative PR.")
 
+    checks.extend(adapter_setup(target, selected, providers, environment))
+
     if github and selected:
         checks.extend(github_setup(target, github, selected, providers, producer))
     return {"version": 1, "kind": "setup-diagnostics", "operation": operation, "github_repository": github,
@@ -281,7 +406,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, indent=2))
     else:
-        print("Guardrails Setup Diagnostic\nConfiguration is not passing evidence. No producers were run.\n")
+        print("Proof Setup Diagnostic\nConfiguration is not passing evidence. No producers were run.\n")
         for row in report["checks"]:
             print(f"[{row['status'].upper()}] {row['id']}: {row['message']}\n  Next: {row['next_step']}")
         print("\n" + " | ".join(f"{key}: {value}" for key, value in report["summary"].items()))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from http.client import IncompleteRead
 import io
 import json
 import os
@@ -36,8 +37,8 @@ def run(run_id: int = 123, attempt: int = 2, **overrides: Any) -> dict[str, Any]
     value = {
         "id": run_id,
         "run_attempt": attempt,
-        "name": "Guardrail Scorecard",
-        "path": ".github/workflows/guardrails-scorecard.yml@refs/heads/main",
+        "name": "Proof Scorecard",
+        "path": ".github/workflows/proof-scorecard.yml@refs/heads/main",
         "event": "pull_request_target",
         "conclusion": "success",
         "created_at": "2026-09-08T12:00:00Z",
@@ -119,16 +120,16 @@ def valid_archive(
 class ReconcilerTests(unittest.TestCase):
     def test_workflow_path_allowlist_is_exact(self) -> None:
         accepted = (
-            ".github/workflows/guardrails-scorecard.yml",
-            ".github/workflows/guardrails-scorecard.yml@main",
-            ".github/workflows/guardrails-scorecard.yml@refs/heads/main",
+            ".github/workflows/proof-scorecard.yml",
+            ".github/workflows/proof-scorecard.yml@main",
+            ".github/workflows/proof-scorecard.yml@refs/heads/main",
         )
         for value in accepted:
             self.assertTrue(MODULE.workflow_path_allowed(value, DEFAULT_BRANCH))
         for value in (
-            ".github/workflows/guardrails-scorecard.yml@feature",
-            ".github/workflows/guardrails-scorecard.yml@refs/pull/7/merge",
-            ".github/workflows/guardrails-scorecard.yml@refs/heads/main/evil",
+            ".github/workflows/proof-scorecard.yml@feature",
+            ".github/workflows/proof-scorecard.yml@refs/pull/7/merge",
+            ".github/workflows/proof-scorecard.yml@refs/heads/main/evil",
             ".github/workflows/other.yml",
             None,
         ):
@@ -147,7 +148,7 @@ class ReconcilerTests(unittest.TestCase):
         )
         invalid_runs = (
             run(name="Other"),
-            run(path=".github/workflows/guardrails-scorecard.yml@feature"),
+            run(path=".github/workflows/proof-scorecard.yml@feature"),
             run(event="push"),
             run(conclusion="cancelled"),
             run(repository={"full_name": "other/repo"}),
@@ -424,7 +425,7 @@ class ReconcilerTests(unittest.TestCase):
             class Client:
                 def json(self, url: str) -> Any:
                     if url == "https://api.github.com/repos/owner/repo":
-                        return {"default_branch": DEFAULT_BRANCH}
+                        return {"default_branch": DEFAULT_BRANCH, "visibility": "public"}
                     if "/actions/workflows/" in url:
                         return {"workflow_runs": [newest, fallback]}
                     if "/actions/runs/200/artifacts" in url:
@@ -433,7 +434,7 @@ class ReconcilerTests(unittest.TestCase):
                             "artifacts": [
                                 {
                                     "id": 20,
-                                    "name": "guardrail-scorecard-200-1",
+                                    "name": "proof-scorecard-200-1",
                                     "expired": False,
                                 }
                             ],
@@ -444,7 +445,7 @@ class ReconcilerTests(unittest.TestCase):
                             "artifacts": [
                                 {
                                     "id": 19,
-                                    "name": "guardrail-scorecard-199-1",
+                                    "name": "proof-scorecard-199-1",
                                     "expired": False,
                                 }
                             ],
@@ -479,11 +480,35 @@ class ReconcilerTests(unittest.TestCase):
             published = json.loads((output / "scorecard.json").read_text())
             self.assertEqual(published["source_run_id"], 199)
 
+            class PrivateClient(Client):
+                def json(self, url: str) -> Any:
+                    if url == "https://api.github.com/repos/owner/repo":
+                        return {"default_branch": DEFAULT_BRANCH, "visibility": "private"}
+                    if url.endswith("/pages"):
+                        return {"public": False, "html_url": "https://private.pages.github.io/"}
+                    if "/actions/workflows/" in url:
+                        return {"workflow_runs": [fallback]}
+                    return super().json(url)
+
+            loader = mock.Mock(side_effect=AssertionError("private Pages must not be fetched"))
+            private_output = root / "private-site"
+            selected, rejected, publish = MODULE.reconcile(
+                REPOSITORY, "token", repository_root,
+                ROOT / "tooling" / "render_scorecard_badge.py", private_output,
+                pages_access="private", client=PrivateClient(), published_loader=loader,
+            )
+            self.assertTrue(publish)
+            self.assertEqual(selected["pages_url"], "https://private.pages.github.io/")
+            self.assertEqual(selected["run"]["id"], 199)
+            self.assertEqual(rejected, [])
+            self.assertTrue((private_output / "index.html").is_file())
+            loader.assert_not_called()
+
     def test_reconcile_propagates_malformed_api_state_without_output(self) -> None:
         class Client:
             def json(self, url: str) -> Any:
                 if url == "https://api.github.com/repos/owner/repo":
-                    return {"default_branch": DEFAULT_BRANCH}
+                    return {"default_branch": DEFAULT_BRANCH, "visibility": "public"}
                 if "/actions/workflows/" in url:
                     return {"workflow_runs": [run()]}
                 if "/artifacts" in url:
@@ -512,7 +537,7 @@ class ReconcilerTests(unittest.TestCase):
         class Client:
             def json(self, url: str) -> Any:
                 if url == "https://api.github.com/repos/owner/repo":
-                    return {"default_branch": DEFAULT_BRANCH}
+                    return {"default_branch": DEFAULT_BRANCH, "visibility": "public"}
                 if "/actions/workflows/" in url:
                     return {"workflow_runs": [run()]}
                 if "/artifacts" in url:
@@ -521,7 +546,7 @@ class ReconcilerTests(unittest.TestCase):
                         "artifacts": [
                             {
                                 "id": 9,
-                                "name": "guardrail-scorecard-123-2",
+                                "name": "proof-scorecard-123-2",
                                 "expired": False,
                             }
                         ],
@@ -724,6 +749,65 @@ class ReconcilerTests(unittest.TestCase):
                     self.assertIn(selected["pages_url"], summary.read_text())
                     self.assertIn(selected["run_url"], summary.read_text())
 
+    def test_private_selection_refuses_older_fallback(self) -> None:
+        validate = mock.Mock(side_effect=[MODULE.CandidateRejected("stale head"), {"run": run(100)}])
+        with self.assertRaisesRegex(ValueError, "cannot fall back.*stale head"):
+            MODULE.select_candidate([run(200), run(100)], None, validate, allow_fallback=False)
+        self.assertEqual(validate.call_count, 1)
+
+    def test_private_pages_rejects_invalid_url_and_api_failure(self) -> None:
+        client = mock.Mock()
+        for url in (None, "http://example.com/", "https://user:pass@example.com/", "https://example.com/?token=x", "https://example.com/\n"):
+            with self.subTest(url=url):
+                client.json.return_value = {"public": False, "html_url": url}
+                with self.assertRaises(ValueError):
+                    MODULE.publication_destination(REPOSITORY, {"visibility": "private"}, "private", client)
+        client.json.side_effect = HTTPError("https://api.github.com/", 404, "missing", {}, None)
+        with self.assertRaises(HTTPError):
+            MODULE.publication_destination(REPOSITORY, {"visibility": "private"}, "private", client)
+
+    def test_publication_access_matrix(self) -> None:
+        for visibility in ("public", "private", "internal", None, "unexpected"):
+            for access in ("", "public", "private", "invalid"):
+                for public in (True, False, None, "false", 0):
+                    with self.subTest(visibility=visibility, access=access, public=public):
+                        client = mock.Mock()
+                        client.json.return_value = {"public": public, "html_url": "https://private.pages.github.io/"}
+                        allowed = visibility in {"public", "private", "internal"} and (
+                            (visibility == "public" and access in {"", "public"})
+                            or (access == "private" and public is False)
+                        )
+                        if allowed:
+                            url, private = MODULE.publication_destination(REPOSITORY, {"visibility": visibility}, access, client)
+                            self.assertEqual(private, access == "private")
+                            self.assertTrue(url.startswith("https://"))
+                        else:
+                            with self.assertRaises(ValueError):
+                                MODULE.publication_destination(REPOSITORY, {"visibility": visibility}, access, client)
+
+    def test_nonpublic_reconcile_blocks_before_evidence_or_public_fetch(self) -> None:
+        client = mock.Mock()
+        client.json.return_value = {"default_branch": "main", "visibility": "private"}
+        loader = mock.Mock()
+        with self.assertRaisesRegex(ValueError, "nonpublic"):
+            MODULE.reconcile(REPOSITORY, "token", ROOT, SCRIPT, ROOT / "unused",
+                             client=client, published_loader=loader)
+        self.assertEqual(client.json.call_count, 1)
+        loader.assert_not_called()
+
+    def test_private_reconcile_never_fetches_public_site(self) -> None:
+        client = mock.Mock()
+        client.json.side_effect = [
+            {"default_branch": "main", "visibility": "private"},
+            {"public": False, "html_url": "https://private.pages.github.io/"},
+        ]
+        loader = mock.Mock()
+        with mock.patch.object(MODULE, "select_candidate", side_effect=MODULE.StalePublication("no candidates")):
+            result = MODULE.reconcile(REPOSITORY, "token", ROOT, SCRIPT, ROOT / "unused",
+                                      pages_access="private", client=client, published_loader=loader)
+        self.assertFalse(result[2])
+        loader.assert_not_called()
+
     def test_cli_normalizes_missing_token_to_exit_two(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -752,9 +836,9 @@ class ReconcilerTests(unittest.TestCase):
         listing = {
             "total_count": 3,
             "artifacts": [
-                {"id": 1, "name": "guardrail-scorecard-123-1", "expired": False},
-                {"id": 2, "name": "guardrail-scorecard-123-2", "expired": False},
-                {"id": 3, "name": "guardrail-scorecard-123-2-extra", "expired": False},
+                {"id": 1, "name": "proof-scorecard-123-1", "expired": False},
+                {"id": 2, "name": "proof-scorecard-123-2", "expired": False},
+                {"id": 3, "name": "proof-scorecard-123-2-extra", "expired": False},
             ],
         }
         self.assertEqual(MODULE.exact_artifact(listing, run())["id"], 2)
@@ -762,7 +846,7 @@ class ReconcilerTests(unittest.TestCase):
             **listing,
             "artifacts": [
                 *listing["artifacts"],
-                {"id": 4, "name": "guardrail-scorecard-123-2", "expired": False},
+                {"id": 4, "name": "proof-scorecard-123-2", "expired": False},
             ],
         }
         with self.assertRaises(ValueError):
@@ -771,6 +855,117 @@ class ReconcilerTests(unittest.TestCase):
             MODULE.exact_artifact({"total_count": 0, "artifacts": []}, run())
         with self.assertRaises(ValueError):
             MODULE.GitHubClient("")
+
+
+class HttpDiagnosticsTests(unittest.TestCase):
+    def test_recursion_failure_preserves_original_http_error(self):
+        failure = HTTPError("https://api.github.com/repos/o/r", 404, "sensitive reason", {},
+                            io.BytesIO(b"[]"))
+        self.addCleanup(failure.close)
+        with (
+            mock.patch.object(MODULE, "urlopen", side_effect=failure),
+            mock.patch.object(MODULE.json, "loads", side_effect=RecursionError("sensitive parser context")),
+            self.assertRaises(HTTPError) as caught,
+        ):
+            MODULE.GitHubClient("token").json(failure.url)
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(failure.code, 404)
+        self.assertIn("not-found", str(failure))
+        self.assertNotIn("sensitive", str(failure))
+
+    def test_deep_error_json_preserves_original_http_error(self):
+        failure = HTTPError(
+            "https://api.github.com/repos/o/r", 404, "sensitive reason", {},
+            io.BytesIO(b"[" * 1200 + b"0" + b"]" * 1200),
+        )
+        self.addCleanup(failure.close)
+        with mock.patch.object(MODULE, "urlopen", side_effect=failure), self.assertRaises(HTTPError) as caught:
+            MODULE.GitHubClient("token").json(failure.url)
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(failure.code, 404)
+        self.assertIn("not-found", str(failure))
+        self.assertNotIn("sensitive", str(failure))
+
+    def test_api_failure_reports_safe_rate_context_and_preserves_exception(self):
+        failure = HTTPError("https://api.github.com/repos/owner/repo?token=secret", 403, "secret reason",
+                            {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1234567890",
+                             "X-GitHub-Request-Id": "ABCD:1234", "Authorization": "secret"},
+                            io.BytesIO(b'{"message":"API rate limit exceeded for secret"}'))
+        self.addCleanup(failure.close)
+        with mock.patch.object(MODULE, "urlopen", side_effect=failure) as request, self.assertRaises(HTTPError) as caught:
+            MODULE.GitHubClient("secret-token").json(failure.url)
+        request.assert_called_once()
+        self.assertIs(caught.exception, failure)
+        message = str(failure)
+        for expected in ("403", "repository metadata", "primary-rate-limit", "ABCD:1234", "1234567890"):
+            self.assertIn(expected, message)
+        self.assertNotIn("secret", message)
+
+    def test_known_messages_classify_without_logging_arbitrary_body(self):
+        cases = ((403, "You have exceeded a secondary rate limit.", "secondary-rate-limit"),
+                 (403, "Resource not accessible by integration", "permission-denied"),
+                 (401, "Bad credentials", "authentication-failed"),
+                 (403, "private candidate payload", "forbidden-unknown"),
+                 (404, "Not Found", "not-found"))
+        for code, body, classification in cases:
+            with self.subTest(code=code, classification=classification):
+                failure = HTTPError("https://api.github.com/repos/o/r/pages", code, body,
+                                    {"X-GitHub-Request-Id": "bad\nheader", "Retry-After": "20"},
+                                    io.BytesIO(json.dumps({"message": body}).encode()))
+                self.addCleanup(failure.close)
+                with mock.patch.object(MODULE, "urlopen", side_effect=failure), self.assertRaises(HTTPError) as caught:
+                    MODULE.GitHubClient("token").json(failure.url)
+                self.assertIs(caught.exception, failure)
+                self.assertIn(classification, str(failure))
+                self.assertIn("retry-after=20", str(failure))
+                self.assertNotIn(body, str(failure))
+                self.assertNotIn("bad", str(failure))
+
+    def test_incomplete_error_body_preserves_original_404(self):
+        body = mock.Mock()
+        body.read.side_effect = IncompleteRead(b"secret partial response", 100)
+        failure = HTTPError("https://api.github.com/repos/o/r/pulls/1?token=secret", 404,
+                            "secret server reason", {"X-GitHub-Request-Id": "ABCD:5678"}, body)
+        self.addCleanup(failure.close)
+        with mock.patch.object(MODULE, "urlopen", side_effect=failure), self.assertRaises(HTTPError) as caught:
+            MODULE.GitHubClient("secret").json(failure.url)
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(caught.exception.code, 404)
+        self.assertIn("pull request metadata; not-found; request-id=ABCD:5678", str(failure))
+        self.assertNotIn("secret", str(failure))
+
+    def test_operation_labels_and_malformed_response_are_safe(self):
+        paths = {"": "repository metadata", "/pages": "Pages configuration",
+                 "/actions/workflows/secret/runs": "completed scorecard runs",
+                 "/actions/runs/secret/artifacts": "run artifact listing",
+                 "/actions/artifacts/secret/zip": "artifact redirect", "/pulls/secret": "pull request metadata",
+                 "/unknown/secret": "GitHub API request"}
+        for suffix, expected in paths.items():
+            self.assertEqual(MODULE.github_request_context("https://api.github.com/repos/secret/private" + suffix
+                                                           + "?credential=secret"), expected)
+        failure = HTTPError("https://api.github.com/secret", 503, "sensitive reason",
+                            {"X-RateLimit-Remaining": "secret", "X-GitHub-Request-Id": "x" * 129},
+                            io.BytesIO(b"not json secret"))
+        self.addCleanup(failure.close)
+        MODULE.describe_http_failure(failure, "GitHub API request")
+        self.assertEqual(str(failure), "HTTP Error 503: GitHub API request; http-failure")
+
+    def test_signed_artifact_failure_hides_url_and_limits_body_read(self):
+        redirect = HTTPError("api", 302, "redirect", {"Location": "https://blob.example/a?sig=secret"}, None)
+        self.addCleanup(redirect.close)
+        opener = mock.Mock()
+        opener.open.side_effect = redirect
+        body = mock.Mock()
+        body.read.return_value = b'x' * 4096
+        failure = HTTPError("https://blob.example/a?sig=secret", 403, "secret", {}, body)
+        self.addCleanup(failure.close)
+        with self.assertRaises(HTTPError) as caught:
+            MODULE.download_artifact("https://api.github.com/repos/o/r/actions/artifacts/1/zip", "token",
+                                     opener=opener, unsigned_open=mock.Mock(side_effect=failure))
+        self.assertIs(caught.exception, failure)
+        self.assertIn("artifact download", str(failure))
+        self.assertNotIn("secret", str(failure))
+        body.read.assert_called_once_with(4096)
 
 
 if __name__ == "__main__":

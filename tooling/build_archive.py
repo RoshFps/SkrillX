@@ -4,7 +4,7 @@
 The archive carries the toolkit source subset that installation needs. When
 run, it extracts that payload to a per-checksum cache directory and executes
 the CLI from there, so ``install.py`` copies real files into the target's
-``.guardrails/`` exactly as a source checkout does. Installed repositories
+``.proof/`` exactly as a source checkout does. Installed repositories
 never import code from the archive at evaluation time.
 """
 
@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE_NAME = "skrillx.pyz"
-PAYLOAD_DIRECTORIES = ("tooling", "guardrails", "policies", "workflows", "security/semgrep", "skills", "pr-review")
+PAYLOAD_DIRECTORIES = ("tooling", "proof", "policies", "workflows", "security/semgrep", "skills", "pr-review")
 EXCLUDED_PARTS = {"__pycache__", ".ruff_cache", "tests", "coverage-support", ".DS_Store"}
 
 LAUNCHER = '''"""skrillx archive launcher: extract the payload once per checksum, then run the CLI."""
@@ -55,7 +55,7 @@ def cache_root():
     if override:
         return Path(override)
     xdg = os.environ.get("XDG_CACHE_HOME", "").strip()
-    return Path(xdg) / "ai-toolkit" if xdg else Path.home() / ".cache" / "ai-toolkit"
+    return Path(xdg) / "skrillx" if xdg else Path.home() / ".cache" / "skrillx"
 
 
 def extracted_root(archive, digest):

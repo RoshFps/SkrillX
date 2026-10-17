@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Guardrails v2 installer-owned runtime.
-"""Validate a Guardrails scorecard and render a bounded public status site."""
+# Proof installer-owned runtime.
+"""Validate a Proof scorecard and render a bounded public status site."""
 
 from __future__ import annotations
 
@@ -137,6 +137,814 @@ def _counts(document: dict[str, Any], mode: str) -> dict[str, int]:
     return {"passed": passed, "total": total}
 
 
+def _result_breakdown(document: dict[str, Any]) -> dict[str, Any]:
+    """Publish only complete control counts that reconcile with both mode totals."""
+    unavailable = {"availability": "unavailable"}
+    rows = document.get("controls")
+    if not isinstance(rows, list):
+        return unavailable
+    counts = {mode: dict.fromkeys(("passed", "failed", "blocked", "unverified"), 0)
+              for mode in ("enforced", "advisory")}
+    seen = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            return unavailable
+        control_id, mode = row.get("id"), row.get("effective_mode")
+        if not isinstance(control_id, str) or not control_id or control_id in seen:
+            return unavailable
+        seen.add(control_id)
+        if mode == "not_activated":
+            continue
+        if not isinstance(mode, str) or mode not in counts:
+            return unavailable
+        status = row.get("evidence_status")
+        if not isinstance(status, str) or status not in {"passed", "failed", "blocked", "no_result"}:
+            return unavailable
+        counts[mode]["unverified" if status == "no_result" else status] += 1
+    for mode, values in counts.items():
+        expected = document[mode]
+        if values["passed"] != expected["passed"] or sum(values.values()) != expected["total"]:
+            return unavailable
+    overall = {key: sum(values[key] for values in counts.values()) for key in counts["enforced"]}
+    return {"availability": "available", "overall": overall, **counts}
+
+
+# Public display allowlist: never use artifact-supplied names, reasons, or URLs.
+# Kept aligned with the built-in catalog by a regression test.
+PUBLIC_CONTROLS = (
+    ('repository-validation', 'Repository Validation', 'Validate repository-owned contracts and configuration', 'Build & quality'),
+    ('documentation-validation', 'Documentation Validation', 'Validate documentation structure, links, and declared targets', 'Build & quality'),
+    ('repository-ground-truth', 'Repository Ground Truth', 'Validate declared repository architecture and engineering documents', 'Build & quality'),
+    ('change-scope', 'PR Size', 'Detect oversized or unexpectedly broad changes', 'Build & quality'),
+    ('pr-metadata', 'PR Metadata', 'Validate pull-request title and body requirements against mutable PR state', 'Build & quality'),
+    ('format-and-lint', 'Format and Lint', 'Verify repository formatting and lint rules with the repository-owned command', 'Build & quality'),
+    ('migration-validation', 'Migration Validation', 'Validate repository-specific database and data migration safety', 'Build & quality'),
+    ('build', 'Build', 'Detect compilation, packaging, and build-time regressions', 'Build & quality'),
+    ('unit-tests', 'Unit Tests', 'Detect functional regressions in changed behavior', 'Build & quality'),
+    ('functional-qa', 'Functional QA', 'Exercise the running application as a user to detect functional regressions in changed behavior', 'AI & QA'),
+    ('changed-code-coverage', 'Changed Code Coverage', 'Measure test coverage for changed code', 'Build & quality'),
+    ('custom-static-analysis', 'Custom Static Analysis', 'Run repository and organization-specific static rules', 'Build & quality'),
+    ('secret-detection', 'Secret Detection', 'Detect credentials and authentication material in source history', 'Security & dependencies'),
+    ('deep-sast', 'Deep SAST', 'Detect security vulnerabilities through semantic source analysis', 'Security & dependencies'),
+    ('dependency-change-review', 'Dependency Change Review', 'Review security and license risk introduced by dependency changes', 'Security & dependencies'),
+    ('platform-secret-protection', 'Platform Secret Protection', 'Verify platform secret scanning and push protection', 'Security & dependencies'),
+    ('dependency-remediation', 'Dependency Remediation', 'Verify automated dependency security remediation is configured', 'Security & dependencies'),
+    ('artifact-provenance', 'Artifact Provenance', 'Attest where and how a release artifact was built', 'Release & runtime'),
+    ('static-quality', 'Static Quality', 'Evaluate maintainability, reliability, and static quality gates', 'Build & quality'),
+    ('dependency-vulnerability', 'Dependency Vulnerability', 'Detect known vulnerabilities in resolved dependencies', 'Security & dependencies'),
+    ('license-compliance', 'License Compliance', 'Evaluate dependency licenses against repository policy', 'Security & dependencies'),
+    ('ai-engineering-review', 'AI Engineering Review', 'Review correctness, architecture, maintainability, and regression risk', 'AI & QA'),
+    ('ai-qa-review', 'AI QA Review', 'Review tests, edge cases, failure paths, and assertions', 'AI & QA'),
+    ('ai-security-review', 'AI Security Review', 'Review authentication, isolation, injection, secrets, and privilege risks', 'AI & QA'),
+    ('ai-repository-standards-review', 'AI Repository Standards Review', 'Review changes against repository-owned engineering ground truth', 'AI & QA'),
+    ('runtime-soak', 'Runtime Soak', 'Detect runtime degradation, leaks, and performance drift over time', 'Release & runtime'),
+    ('container-vulnerability', 'Container Vulnerability', 'Detect vulnerabilities in container images', 'Release & runtime'),
+    ('iac-misconfiguration', 'IaC Misconfiguration', 'Detect insecure infrastructure-as-code configuration', 'Security & dependencies'),
+    ('artifact-sbom', 'Artifact SBOM', 'Record the software components contained in an artifact', 'Release & runtime'),
+    ('artifact-vulnerability', 'Artifact Vulnerability', 'Detect vulnerabilities in a built release artifact', 'Release & runtime'),
+    ('deployment-policy', 'Deployment Policy', 'Verify deployment approval and environment policy', 'Release & runtime'),
+    ('dynamic-application-security', 'Dynamic Application Security', 'Detect vulnerabilities in a running application', 'Release & runtime'),
+    ('runtime-assurance', 'Runtime Assurance', 'Verify runtime security and operational safeguards', 'Release & runtime'),
+ )
+_CONTROL_RESULTS = {
+    "passed": ("Passed", "good"), "failed": ("Failed", "danger"),
+    "blocked": ("Blocked", "caution"), "no_result": ("Unverified", "neutral"),
+    "not_activated": ("Not activated", "neutral"),
+    "not_reported": ("Not reported", "neutral"),
+}
+_CONTROL_MODES = {"enforced": "Enforced", "advisory": "Advisory",
+                  "not_activated": "Not activated", "not_reported": "Not reported"}
+
+
+_REVIEW_FINDING_METRICS = 'Findings by severity (P0 to P3); unresolved P0/P1 findings'
+
+
+# Check-specific assessment criteria; these describe the contract, not claimed measurements.
+_CHECK_ASSESSMENTS = {'repository-validation': ('Installed Proof contracts',
+                           'Installed runtime files, Semgrep self-test fixtures, schemas, and the control catalog, profiles, providers, and policy',
+                           'Every contract group validates; the first failure stops the run',
+                           'Contract groups passed; failed; not run'),
+ 'documentation-validation': ('Documentation integrity',
+                              'Local Markdown links, declared documentation targets, and required documentation updates for changed files',
+                              'No broken local links and every documentation mapping is satisfied',
+                              'Markdown files; local links checked; broken links; mapping failures'),
+ 'repository-ground-truth': ('Declared engineering ground truth',
+                             'Documents declared in .proof/ground-truth-ai.yaml, such as agent instructions and architecture, testing, security, and contribution guides',
+                             'Every declared document exists in the repository; document contents are not assessed',
+                             'Documents declared; found; missing'),
+ 'change-scope': ('Change size',
+                  'Counted files, added lines, changed lines, and maximum additions per file',
+                  'Each measurement is within its configured limit',
+                  'Files and LOC are shown below'),
+ 'pr-metadata': ('PR title and description',
+                 'Configured title pattern and required description sections; title and description text are not published',
+                 'Title matches the configured pattern and every required section is present',
+                 'Whether the title matches; required sections present and missing'),
+ 'format-and-lint': ('Formatting and lint rules',
+                     'Repository-configured formatter and lint command',
+                     'Configured command completes successfully',
+                     'Files checked; errors; warnings'),
+ 'migration-validation': ('Migration safety',
+                          'Repository-specific migration checks, or declared absence of migrations',
+                          'Repository migration validator succeeds',
+                          'Migrations checked; failed'),
+ 'build': ('Build and packaging',
+           'Repository-configured build command',
+           'Build command completes successfully',
+           'Artifacts produced; build errors'),
+ 'unit-tests': ('Automated unit tests',
+                'Repository-configured test command and selected test suites',
+                'Test command completes successfully',
+                'Tests passed; failed; skipped; total'),
+ 'functional-qa': ('Application behavior',
+                   'Configured user journeys and assertions against a running application',
+                   'Executed QA scenarios meet the advisory scenario expectations',
+                   'Scenarios passed; failed; blocked; skipped'),
+ 'changed-code-coverage': ('Coverage of changed code',
+                           'Executable changed lines compared with repository coverage policy',
+                           'Changed-line coverage meets the repository-configured threshold',
+                           'Covered lines; uncovered lines; coverage percentage; configured threshold'),
+ 'custom-static-analysis': ('Custom static rules',
+                            'Repository and organization-specific analysis rules',
+                            'Configured analyzer completes without policy-blocking findings',
+                            'Findings by severity'),
+ 'secret-detection': ('Secrets in source history',
+                      'Credential patterns in the configured scan scope',
+                      'Scanner reports no policy-blocking secret findings',
+                      'Secret findings'),
+ 'deep-sast': ('Semantic security analysis',
+               'Data flow and security queries for configured languages',
+               'Selected security analysis satisfies its configured policy',
+               'Queries run; vulnerabilities by severity'),
+ 'dependency-change-review': ('Dependency changes',
+                              'New or changed dependencies and associated security/license risk',
+                              'Changes satisfy the configured dependency review policy',
+                              'Dependencies changed; new vulnerabilities; license violations'),
+ 'platform-secret-protection': ('Platform protection settings',
+                                'Secret scanning and push protection capability checks',
+                                'Required platform protections are enabled and verified',
+                                'Secret scanning enabled; push protection enabled'),
+ 'dependency-remediation': ('Remediation configuration',
+                            'Automated dependency security update configuration',
+                            'Required dependency remediation automation is configured',
+                            'Security updates enabled; configuration checks'),
+ 'artifact-provenance': ('Build provenance',
+                         'Attestation tying a release artifact to its build source',
+                         'Artifact provenance satisfies the release policy',
+                         'Artifacts attested; verification failures'),
+ 'static-quality': ('Static quality gate',
+                    'Maintainability, reliability, and quality rules from the selected provider',
+                    'Provider quality gate satisfies its configured policy',
+                    'Quality-gate conditions; bugs; code smells; duplication'),
+ 'dependency-vulnerability': ('Resolved dependency vulnerabilities',
+                              'Known vulnerabilities in the resolved dependency graph',
+                              'Findings satisfy the configured severity and exception policy',
+                              'Dependencies scanned; critical/high/medium/low findings'),
+ 'license-compliance': ('Dependency license policy',
+                        'Detected dependency licenses and configured allow/deny rules',
+                        'Licenses satisfy the configured compliance policy',
+                        'Licenses evaluated; violations; unknown licenses'),
+ 'ai-engineering-review': ('Engineering review dimensions',
+                           'Correctness, architecture, maintainability, and regression risk',
+                           'Advisory review completes with a documented disposition',
+                           _REVIEW_FINDING_METRICS),
+ 'ai-qa-review': ('Test adequacy review',
+                  'Test assertions, edge cases, failure paths, and coverage gaps',
+                  'Advisory review completes with a documented disposition',
+                  _REVIEW_FINDING_METRICS),
+ 'ai-security-review': ('Security review dimensions',
+                        'Authentication, isolation, injection, secrets, and privilege boundaries',
+                        'Advisory review completes with a documented disposition',
+                        _REVIEW_FINDING_METRICS),
+ 'ai-repository-standards-review': ('Repository standards review',
+                                    'Changes compared with repository-owned engineering requirements',
+                                    'Advisory review completes with a documented disposition',
+                                    _REVIEW_FINDING_METRICS),
+ 'runtime-soak': ('Sustained runtime behavior',
+                  'Degradation, resource leaks, errors, and performance drift over time',
+                  'Observed runtime stays within configured environment limits',
+                  'Test duration; error rate; latency; resource growth'),
+ 'container-vulnerability': ('Container image security',
+                             'Vulnerabilities in the selected container image',
+                             'Image findings satisfy the configured vulnerability policy',
+                             'Images scanned; vulnerabilities by severity'),
+ 'iac-misconfiguration': ('Infrastructure configuration',
+                          'Security rules for infrastructure-as-code resources',
+                          'Configuration satisfies the selected infrastructure policy',
+                          'Resources scanned; misconfigurations by severity'),
+ 'artifact-sbom': ('Software component inventory',
+                   'Software components recorded in an artifact SBOM',
+                   'SBOM satisfies artifact inventory requirements',
+                   'Components recorded; missing metadata'),
+ 'artifact-vulnerability': ('Release artifact security',
+                            'Vulnerabilities in a built release artifact',
+                            'Artifact findings satisfy the configured vulnerability policy',
+                            'Artifacts scanned; vulnerabilities by severity'),
+ 'deployment-policy': ('Deployment authorization',
+                       'Approval and environment-policy evidence',
+                       'Deployment satisfies required environment policy',
+                       'Approvals verified; policy violations'),
+ 'dynamic-application-security': ('Running application security',
+                                  'Security checks against a deployed application',
+                                  'Runtime security findings satisfy configured scan policy',
+                                  'Endpoints scanned; vulnerabilities by severity'),
+ 'runtime-assurance': ('Operational safeguards',
+                       'Runtime security and operational control evidence',
+                       'Safeguards satisfy the configured environment policy',
+                       'Safeguards verified; policy violations')}
+
+
+def _execution_details(row: dict[str, Any]) -> dict[str, Any]:
+    """Validate optional timing facts again at the public projection boundary."""
+    unavailable = {"availability": "unavailable"}
+    result = row.get("authoritative_result")
+    value = result.get("check_execution") if isinstance(result, dict) else None
+    conclusions = {"success": "passed", "failure": "failed", "cancelled": "blocked",
+                   "timed_out": "blocked", "action_required": "blocked", "stale": "blocked",
+                   "neutral": "no_result", "skipped": "no_result"}
+    if (not isinstance(value, dict)
+            or set(value) != {"version", "started_at", "completed_at", "duration_seconds", "conclusion"}
+            or type(value["version"]) is not int or value["version"] != 1
+            or not isinstance(value["conclusion"], str)
+            or conclusions.get(value["conclusion"]) != row.get("evidence_status")
+            or ("no_result" if result.get("status") == "not_run" else result.get("status")) != row.get("evidence_status")
+            or value["conclusion"] not in conclusions
+            or type(value["duration_seconds"]) is not int
+            or not 0 <= value["duration_seconds"] <= 2**53 - 1):
+        return unavailable
+    try:
+        for key in ("started_at", "completed_at"):
+            timestamp = value[key]
+            if not isinstance(timestamp, str) or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})", timestamp) is None:
+                return unavailable
+            if timestamp[-1:] != "Z" and (int(timestamp[-5:-3]) > 23 or int(timestamp[-2:]) > 59):
+                return unavailable
+        start = _timestamp(value["started_at"], "started_at")
+        end = _timestamp(value["completed_at"], "completed_at")
+        elapsed = (datetime.fromisoformat(end.replace("Z", "+00:00")) - datetime.fromisoformat(start.replace("Z", "+00:00"))).total_seconds()
+        if elapsed < 0 or int(elapsed) != value["duration_seconds"]:
+            return unavailable
+    except (ValueError, TypeError, OverflowError):
+        return unavailable
+    return {"availability": "available", "started_at": start, "completed_at": end,
+            "duration_seconds": value["duration_seconds"], "conclusion": value["conclusion"]}
+
+
+_SEVERITIES = ("critical", "high", "medium", "low")
+_FINDING_FIELDS = ("total", *_SEVERITIES, "unrated")
+_MEASURED_FIELDS = {"unit-tests": ("tests", ("total", "passed", "failed", "skipped")),
+                    "changed-code-coverage": ("coverage", ("measured_lines", "covered_lines", "threshold_percent")),
+                    "repository-validation": ("contracts", ("total", "passed", "failed", "not_run")),
+                    "documentation-validation": ("documentation", ("markdown_files", "links_checked", "broken_links", "mapping_failures")),
+                    "repository-ground-truth": ("documents", ("declared", "found", "missing")),
+                    "migration-validation": ("migrations", ("checked", "failed")),
+                    **{control_id: ("review_findings", ("total", "p0", "p1", "p2", "p3", "unresolved_blocking"))
+                       for control_id in ("ai-engineering-review", "ai-qa-review", "ai-security-review",
+                                          "ai-repository-standards-review")},
+                    **{control_id: ("findings", _FINDING_FIELDS) for control_id in ("custom-static-analysis", "secret-detection",
+                                                                          "deep-sast", "dependency-vulnerability")}}
+
+
+def _measurements_consistent(kind: str, numbers: dict[str, int], status: str) -> bool:
+    """Mirror the evaluator's arithmetic and status rules for each measurement kind."""
+    passed = status == "passed"
+    if kind == "tests":
+        return (numbers["total"] > 0 and numbers["total"] == numbers["passed"] + numbers["failed"] + numbers["skipped"]
+                and not (passed and numbers["failed"]))
+    if kind == "coverage":
+        below = numbers["covered_lines"] * 100 < numbers["threshold_percent"] * numbers["measured_lines"]
+        return (numbers["covered_lines"] <= numbers["measured_lines"] and numbers["threshold_percent"] <= 100
+                and not (passed and below))
+    if kind == "contracts":
+        clean = numbers["failed"] == 0 and numbers["not_run"] == 0
+        return (numbers["total"] > 0 and numbers["total"] == numbers["passed"] + numbers["failed"] + numbers["not_run"]
+                and passed == clean and (passed or numbers["failed"] > 0))
+    if kind == "documentation":
+        return (numbers["broken_links"] <= numbers["links_checked"]
+                and passed == (numbers["broken_links"] + numbers["mapping_failures"] == 0))
+    if kind == "migrations":
+        return numbers["failed"] <= numbers["checked"] and not (passed and numbers["failed"])
+    if kind == "review_findings":
+        blocking = numbers["p0"] + numbers["p1"]
+        return numbers["total"] == blocking + numbers["p2"] + numbers["p3"] and numbers["unresolved_blocking"] <= blocking
+    if kind == "findings":
+        # Arithmetic only: a scan may pass with findings under its own threshold.
+        return numbers["total"] == sum(numbers[key] for key in _FINDING_FIELDS[1:])
+    return numbers["declared"] == numbers["found"] + numbers["missing"] and passed == (numbers["missing"] == 0)
+
+
+def _measurements(control_id: str, row: dict[str, Any]) -> dict[str, Any]:
+    """Re-validate optional self-reported measurements; never trust them for status."""
+    unavailable = {"availability": "unavailable"}
+    spec = _MEASURED_FIELDS.get(control_id)
+    result = row.get("authoritative_result")
+    value = result.get("measurements") if isinstance(result, dict) else None
+    status = row.get("evidence_status")
+    if spec is None or status not in ("passed", "failed"):
+        return unavailable
+    kind, fields = spec
+    producer = result.get("producer") if isinstance(result, dict) else None
+    if kind == "review_findings" and isinstance(producer, str) and producer.startswith("GitHub Review: "):
+        # A native GitHub review posts findings as comments; there is no result file to count.
+        return {"availability": "unavailable", "reason": "review_comments"}
+    if not isinstance(value, dict):
+        return unavailable
+    numbers = value.get(kind)
+    if (set(value) != {"version", "source", kind} or type(value.get("version")) is not int or value["version"] != 1
+            or value.get("source") != "pull-request-workflow" or result.get("status") != status
+            or not isinstance(numbers, dict) or set(numbers) != set(fields)
+            or any(type(numbers[key]) is not int or not 0 <= numbers[key] <= 2**53 - 1 for key in fields)
+            or not _measurements_consistent(kind, numbers, status)):
+        return unavailable
+    return {"availability": "available", "source": "pull-request-workflow", kind: {key: numbers[key] for key in fields}}
+
+
+_SELF_REPORTED_NOTE = "Self-reported by the pull request's own workflow run; not independently verified and never used for the result."
+_AI_REVIEW_NOTE = ("Counted from the AI reviewer's result file in the pull request's own workflow run. The findings are "
+                   "the AI provider's judgment, not independently verified, and never used for the result; AI review is advisory-only.")
+
+
+def _measurement_note(measurements: dict[str, Any]) -> str:
+    return _AI_REVIEW_NOTE if "review_findings" in measurements else _SELF_REPORTED_NOTE
+
+
+def _measurement_summary(measurements: dict[str, Any]) -> str | None:
+    if measurements["availability"] != "available":
+        return None
+    if "tests" in measurements:
+        tests = measurements["tests"]
+        return (f'{tests["passed"]:,} passed · {tests["failed"]:,} failed · {tests["skipped"]:,} skipped '
+                f'({tests["total"]:,} tests)')
+    if "contracts" in measurements:
+        counts = measurements["contracts"]
+        return (f'{counts["passed"]:,} passed · {counts["failed"]:,} failed · {counts["not_run"]:,} not run '
+                f'({counts["total"]:,} contract groups)')
+    if "documentation" in measurements:
+        counts = measurements["documentation"]
+        return (f'{counts["markdown_files"]:,} Markdown files · {counts["links_checked"]:,} local links checked · '
+                f'{counts["broken_links"]:,} broken · {counts["mapping_failures"]:,} documentation mapping failures')
+    if "documents" in measurements:
+        counts = measurements["documents"]
+        return (f'{counts["found"]:,} of {counts["declared"]:,} declared documents found · '
+                f'{counts["missing"]:,} missing')
+    if "review_findings" in measurements:
+        counts = measurements["review_findings"]
+        if not counts["total"]:
+            return "No findings reported by the AI reviewer"
+        noun = "finding" if counts["total"] == 1 else "findings"
+        return (f'{counts["total"]:,} {noun}: {counts["p0"]:,} P0 · {counts["p1"]:,} P1 · {counts["p2"]:,} P2 · '
+                f'{counts["p3"]:,} P3 · {counts["unresolved_blocking"]:,} unresolved P0/P1')
+    if "migrations" in measurements:
+        counts = measurements["migrations"]
+        if not counts["checked"]:
+            return "No migrations found to check"
+        return f'{counts["checked"]:,} migrations checked · {counts["failed"]:,} failed'
+    if "findings" in measurements:
+        counts = measurements["findings"]
+        if not counts["total"]:
+            return "No findings reported"
+        if not any(counts[key] for key in _SEVERITIES):
+            plural = "s" if counts["total"] != 1 else ""
+            return f'{counts["total"]:,} finding{plural} · severity not rated by the scanner'
+        summary = " · ".join(f"{counts[key]:,} {key}" for key in _SEVERITIES)
+        return summary + (f' · {counts["unrated"]:,} unrated' if counts["unrated"] else "")
+    coverage = measurements["coverage"]
+    measured, covered = coverage["measured_lines"], coverage["covered_lines"]
+    if not measured:
+        return f'No measurable changed lines · target {coverage["threshold_percent"]}%'
+    percent = int(covered * 1000 / measured) / 10  # floor to one decimal; never round up to a target
+    return f'{covered:,} of {measured:,} changed lines covered ({percent:.1f}%) · target {coverage["threshold_percent"]}%'
+
+
+_PR_METADATA_NOTE = ("Evaluated by the trusted base-branch PR metadata validator. "
+                     "The title, description, and section names are not published.")
+
+
+def _pr_metadata_detail(control_id: str, row: dict[str, Any]) -> dict[str, Any]:
+    """Re-validate trusted PR metadata counts; mirrors evaluate.validate_pr_metadata."""
+    unavailable = {"availability": "unavailable"}
+    result = row.get("authoritative_result")
+    value = result.get("pr_metadata") if isinstance(result, dict) else None
+    status = row.get("evidence_status")
+    provider = row.get("authoritative_provider")
+    if (control_id != "pr-metadata" or not isinstance(value, dict) or status not in ("passed", "failed")
+            or not isinstance(provider, dict) or provider.get("id") != "repository-pr-metadata"
+            or result.get("status") != status
+            or set(value) != {"version", "title_matches", "required_sections", "missing_sections"}
+            or type(value["version"]) is not int or value["version"] != 1
+            or type(value["title_matches"]) is not bool):
+        return unavailable
+    required, missing = value["required_sections"], value["missing_sections"]
+    if (type(required) is not int or type(missing) is not int or not 0 <= missing <= required <= 20
+            or (value["title_matches"] and missing == 0) != (status == "passed")):
+        return unavailable
+    return {"availability": "available", "title_matches": value["title_matches"],
+            "required_sections": required, "missing_sections": missing}
+
+
+def _pr_metadata_summary(detail: dict[str, Any]) -> str | None:
+    if detail["availability"] != "available":
+        return None
+    title = "Title matches" if detail["title_matches"] else "Title does not match"
+    required = detail["required_sections"]
+    if not required:
+        return f"{title} the required format · No required sections configured"
+    noun = "section" if required == 1 else "sections"
+    return f"{title} the required format · {required - detail['missing_sections']:,} of {required:,} required {noun} present"
+
+
+def _control_details(document: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project enum-only results for known controls; fail closed on bad totals."""
+    consistent = _result_breakdown(document)["availability"] == "available"
+    rows = {row["id"]: row for row in document["controls"]} if consistent else {}
+    details = []
+    for control_id, name, purpose, group in PUBLIC_CONTROLS:
+        row = rows.get(control_id, {})
+        mode, status = row.get("effective_mode"), row.get("evidence_status")
+        valid = (mode in ("enforced", "advisory") and status in ("passed", "failed", "blocked", "no_result")) or (mode == status == "not_activated")
+        # Only the allowlisted pull-request subject is published; anything else stays plain not activated.
+        separate = (valid and mode == "not_activated" and row.get("inactive_reason") == "other_subject"
+                    and row.get("evidence_subject") == "pull-request")
+        details.append({"id": control_id, "name": name, "purpose": purpose, "group": group,
+                        "mode": mode if valid else "not_reported",
+                        "status": status if valid else "not_reported",
+                        "separate_subject": "pull-request" if separate else None,
+                        "execution": _execution_details(row) if valid else {"availability": "unavailable"},
+                        "measurements": _measurements(control_id, row) if valid else {"availability": "unavailable"},
+                        "detail": _pr_metadata_detail(control_id, row) if valid else {"availability": "unavailable"}})
+    return details
+
+
+_SEPARATE_RESULT = ("Checked on the PR", "neutral")
+_SEPARATE_NOTE = ("Policy activates this check on the pull request itself, because a title or description edit does not "
+                  "create a new commit. This snapshot did not include a pull-request result, so the check is excluded "
+                  "from these totals. See the pull request's PR Metadata check.")
+
+
+def _result_label(row: dict[str, Any]) -> tuple[str, str]:
+    return _SEPARATE_RESULT if row.get("separate_subject") else _CONTROL_RESULTS[row["status"]]
+
+
+def _controls_markdown(controls: list[dict[str, Any]]) -> str:
+    lines = ["## Individual checks", "", "Every built-in catalog check is listed. Not reported means this snapshot has no validated row; it does not imply disabled or passed.", "",
+             "| Check | ID | Mode | Result | Purpose |", "| --- | --- | --- | --- | --- |"]
+    for row in controls:
+        lines.append(f"| {row['name']} | `{row['id']}` | {_CONTROL_MODES[row['mode']]} | {_result_label(row)[0]} | {row['purpose']} |")
+    measured = [(row["name"], _measurement_summary(row["measurements"]), row["measurements"]) for row in controls]
+    measured = [(name, summary, values) for name, summary, values in measured if summary]
+    if measured:
+        lines += ["", "### Self-reported measurements", "", _SELF_REPORTED_NOTE, ""]
+        lines += [f"- {name}: {summary}" + (" (AI review, advisory-only)" if "review_findings" in values else "")
+                  for name, summary, values in measured]
+        if any("review_findings" in values for *_, values in measured):
+            lines += ["", _AI_REVIEW_NOTE]
+    trusted = [(row["name"], _pr_metadata_summary(row["detail"])) for row in controls]
+    trusted = [(name, summary) for name, summary in trusted if summary]
+    if trusted:
+        lines += ["", "### PR metadata", "", _PR_METADATA_NOTE, ""]
+        lines += [f"- {name}: {summary}" for name, summary in trusted]
+    return "\n".join(lines)
+
+
+def _duration(seconds: int) -> str:
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:,}h {minutes}m {secs}s"
+    return f"{minutes}m {secs}s" if minutes else f"{secs}s"
+
+
+def _utc_label(timestamp: str) -> str:
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+    return parsed.strftime("%d %b %Y · %H:%M:%S UTC")
+
+
+_ATTENTION_STATUSES = ("failed", "blocked", "no_result")
+_INACTIVE_STATUSES = ("not_activated", "not_reported")
+
+
+def _check_target(control_id: str) -> str:
+    return "size-title" if control_id == "change-scope" else f"check-{control_id}"
+
+
+def _attention_html(controls: list[dict[str, Any]], breakdown: dict[str, Any]) -> str:
+    """List active checks without a passing result, most severe first."""
+    flagged = sorted((row for row in controls if row["status"] in _ATTENTION_STATUSES),
+                     key=lambda row: _ATTENTION_STATUSES.index(row["status"]))
+    unnamed = 0
+    if breakdown["availability"] == "available":
+        overall = breakdown["overall"]
+        unnamed = max(0, overall["failed"] + overall["blocked"] + overall["unverified"] - len(flagged))
+    if not flagged and not unnamed:
+        return ""
+    items = []
+    for row in flagged:
+        label, tone = _CONTROL_RESULTS[row["status"]]
+        name = html.escape(row["name"])
+        items.append(f'<li><span class="size-result {tone}">{label}</span> <a href="#{_check_target(row["id"])}">{name}</a> <span class="attention-mode">{_CONTROL_MODES[row["mode"]]}</span></li>')
+    if unnamed:
+        plural = "s" if unnamed != 1 else ""
+        items.append(f'<li class="attention-private">{unnamed} custom control{plural} without a passing result. Custom control names are not published.</li>')
+    return '<section class="attention" aria-labelledby="attention-title"><h2 id="attention-title">Needs attention</h2><ul>' + ''.join(items) + '</ul></section>'
+
+
+# Repository-owned commands whose only portable signal is their exit status.
+_EXIT_STATUS_ONLY = {"build", "format-and-lint"}
+# Scanners whose finding counts live in the provider's own service or check, not in this report.
+_COUNTS_ELSEWHERE = {
+    "deep-sast": ("Finding counts are not collected for this run. CodeQL and Snyk Code counts appear when their workflows "
+                  "package them; Semgrep App keeps its findings in its own report. Open the provider's report, or GitHub code "
+                  "scanning (the repository's Security tab) for CodeQL, for vulnerabilities by severity."),
+    "static-quality": ("Only the quality-gate result is reported. SonarQube keeps quality-gate conditions, bugs, code smells, "
+                       "and duplication on the SonarQube server; open the project there for them."),
+    "dependency-change-review": ("Only the overall result is reported. GitHub Dependency Review writes changed dependencies, "
+                                 "new vulnerabilities, and license violations to its own job summary; open the pull "
+                                 "request's Dependency Review check for them."),
+    "dependency-vulnerability": ("Only the overall result is reported. Snyk Open Source counts appear when the Snyk workflow "
+                                 "packages them; the FOSSA adapter does not export finding counts. Open the pull request's "
+                                 "provider check or the provider project for findings by severity."),
+    "license-compliance": ("Only the overall result is reported. The FOSSA adapter does not yet export license counts; "
+                           "open the pull request's FOSSA check or the FOSSA project for them."),
+}
+
+
+def _counts_gap(metrics: str, control_id: str = "", measurements: dict[str, Any] | None = None) -> str:
+    """Explain, in a sentence, which counts this check type could report but did not."""
+    if (measurements or {}).get("reason") == "review_comments":
+        return ("Only the review state was reported. This reviewer posts its findings as pull request review comments, "
+                "which this report does not count; open the pull request's reviews to read them.")
+    if _MEASURED_FIELDS.get(control_id, ("",))[0] == "review_findings":
+        return ("Only the overall result was reported. Finding counts appear only when an AI PR Review adapter packages "
+                "its result file for this run; a native GitHub review posts findings as review comments instead. "
+                "Open the source report for the review output.")
+    if control_id in _COUNTS_ELSEWHERE:
+        return _COUNTS_ELSEWHERE[control_id]
+    if control_id in _EXIT_STATUS_ONLY:
+        return ("Only the command's exit status is reported. This repository supplies the command, so counts such as "
+                f"{metrics[:1].lower() + metrics[1:].replace('; ', ', ')} depend on its tools; open the source report for their output.")
+    fields = ", ".join(part.strip() for part in metrics.split(";"))
+    return f"Only the overall result was reported. This report does not include {fields[:1].lower() + fields[1:]}."
+
+
+def _inactive_intro(inactive: list[tuple[str, str]]) -> str:
+    # Not activated is a known exclusion; not reported means the row is missing, so
+    # its relationship to the aggregate totals is unknown and must not be asserted.
+    statuses = {status for status, _ in inactive}
+    parts = []
+    if "separate" in statuses:
+        parts.append("Checks marked Checked on the PR run against the pull request, not this commit, and are excluded from these totals.")
+    if "not_activated" in statuses:
+        parts.append("Not activated checks are excluded from the active-control totals.")
+    if "not_reported" in statuses:
+        parts.append("Not reported checks have no validated row in this snapshot; whether they count toward the totals is unknown.")
+    return " ".join(parts)
+
+
+def _count_reconciliation(metadata: dict[str, Any]) -> str:
+    """Explain how the aggregate totals relate to the listed built-in checks."""
+    controls = metadata["controls"]
+    listed = len(controls)
+    if metadata["result_breakdown"]["availability"] != "available":
+        return (f"Individual results could not be matched to these totals for this snapshot, so the "
+                f"{listed} built-in checks below are shown as not reported.")
+    active = sum(row["status"] in _ATTENTION_STATUSES + ("passed",) for row in controls)
+    separate = sum(bool(row.get("separate_subject")) for row in controls)
+    inactive = sum(row["status"] == "not_activated" for row in controls) - separate
+    missing = sum(row["status"] == "not_reported" for row in controls)
+    custom = metadata["total"] - active
+
+    def plural(count: int, noun: str) -> str:
+        return f"{count} {noun}{'' if count == 1 else 's'}"
+
+    parts = [f"The totals count {plural(metadata['total'], 'active check')}."]
+    def verb(count: int, singular: str, plural_form: str) -> str:
+        return f"{count} {singular if count == 1 else plural_form}"
+
+    breakdown = [verb(active, "is active", "are active")]
+    if separate:
+        breakdown.append(verb(separate, "is checked on the pull request", "are checked on the pull request"))
+    if inactive:
+        breakdown.append(verb(inactive, "is not activated", "are not activated"))
+    if missing:
+        breakdown.append(verb(missing, "is not reported", "are not reported"))
+    joined = breakdown[0] if len(breakdown) == 1 else ", ".join(breakdown[:-1]) + " and " + breakdown[-1]
+    parts.append(f"Of the {listed} built-in checks listed below, {joined}.")
+    if separate or inactive or missing:
+        parts.append("Only active checks count toward the totals.")
+    if custom > 0:
+        parts.append(f"{plural(custom, 'custom check')} also {'counts' if custom == 1 else 'count'} but "
+                     f"{'is' if custom == 1 else 'are'} not listed by name.")
+    return " ".join(parts)
+
+
+def _controls_html(controls: list[dict[str, Any]], run_url: str, scope: dict[str, Any]) -> str:
+    groups = []
+    active_details = []
+    inactive_details = []
+    for group in ("Build & quality", "Security & dependencies", "AI & QA", "Release & runtime"):
+        rows = []
+        for row in controls:
+            if row["group"] != group:
+                continue
+            label, tone = _result_label(row)
+            safe = {key: html.escape(value, quote=True) for key, value in row.items() if isinstance(value, str)}
+            note = {"not_reported": "No validated row in this snapshot. Activation and outcome are unknown.",
+                    "not_activated": "Not activated for this evaluation. Excluded from active-control totals.",
+                    "no_result": "No usable evidence was available. This is not a passing result.",
+                    "passed": "",
+                    "failed": "The producer reported a failure.",
+                    "blocked": "The producer reported a blocker."}[row["status"]]
+            if row.get("separate_subject"):
+                note = _SEPARATE_NOTE
+            evidence = '' if row["status"] in _INACTIVE_STATUSES else f'<a href="{html.escape(run_url, quote=True)}" aria-label="Source report for {safe["name"]}">Source report ↗</a>'
+            target = _check_target(row["id"])
+            # A dash means no active mode: unknown (not reported) or excluded (not activated).
+            mode = "—" if row["mode"] in _INACTIVE_STATUSES else _CONTROL_MODES[row["mode"]]
+            rows.append(f'<tr><th scope="row"><a href="#{target}">{safe["name"]}</a> <code class="check-id">{safe["id"]}</code></th><td><span class="size-result {tone}">{label}</span></td><td class="mode-cell">{mode}</td></tr>')
+            assessment, inputs, condition, metrics = _CHECK_ASSESSMENTS[row["id"]]
+            criteria = [("Assessment", assessment), ("Evaluates", inputs), ("Expected result", condition)]
+            execution = row["execution"]
+            run_facts = ''
+            if execution["availability"] == "available":
+                duration = _duration(execution["duration_seconds"])
+                completed = _utc_label(execution["completed_at"])
+                run_facts = f'<p class="check-run">Ran for <strong>{duration}</strong> · completed <time datetime="{execution["completed_at"]}">{completed}</time></p>'
+                criteria.extend([("Started (UTC)", execution["started_at"]),
+                                 ("Completed (UTC)", execution["completed_at"]),
+                                 ("Execution time", f'{duration} ({execution["duration_seconds"]:,} seconds)'),
+                                 ("Producer conclusion", execution["conclusion"].replace("_", " "))])
+            else:
+                criteria.append(("Execution time", "Not supplied by this source report"))
+            measured = _measurement_summary(row["measurements"])
+            evaluated = _pr_metadata_summary(row["detail"])
+            if evaluated:
+                run_facts += f'<p class="check-measure"><strong>{html.escape(evaluated)}</strong><span>{_PR_METADATA_NOTE}</span></p>'
+                criteria.append(("Evaluated", evaluated))
+            elif measured:
+                run_facts += f'<p class="check-measure"><strong>{html.escape(measured)}</strong><span>{_measurement_note(row["measurements"])}</span></p>'
+                criteria.append(("Self-reported measurements", measured))
+            elif row["id"] != "change-scope":
+                criteria.append(("Counts not reported", _counts_gap(metrics, row["id"], row["measurements"])))
+            criteria_rows = ''.join(f'<tr><th scope="row">{html.escape(key)}</th><td>{html.escape(value)}</td></tr>' for key, value in criteria)
+            measurements = '<details class="criteria"><summary>Assessment criteria</summary><table class="assessment-table"><caption>Assessment criteria and available detail</caption><tbody>' + criteria_rows + '</tbody></table></details>'
+            if row["id"] == "change-scope":
+                measurements += _scope_html(scope)
+            note_html = f'<p class="check-note">{note}</p>' if note else ''
+            mode_html = '' if row["mode"] in _INACTIVE_STATUSES else f'<p class="check-mode">{_CONTROL_MODES[row["mode"]]}</p>'
+            card = f'<article class="check-detail {tone}" id="check-{safe["id"]}" tabindex="-1"><div class="check-top"><h3>{safe["name"]} <code class="check-id">{safe["id"]}</code></h3><span class="size-result">{label}</span></div><p>{safe["purpose"]}</p>{mode_html}{note_html}{run_facts}{measurements}<div class="check-links">{evidence}<a href="#checks-title">Back to checks ↑</a></div></article>'
+            detail_status = "separate" if row.get("separate_subject") else row["status"]
+            (inactive_details if row["status"] in _INACTIVE_STATUSES else active_details).append((detail_status, card))
+        groups.append(f'<tbody><tr class="check-category"><th colspan="3" scope="rowgroup">{html.escape(group)}</th></tr>{"".join(rows)}</tbody>')
+    overview = '<section class="checks" aria-labelledby="checks-title"><p class="eyebrow">Every check, visible</p><h2 id="checks-title" tabindex="-1">Individual checks</h2><p class="checks-intro">All built-in catalog checks. Select a check to see its purpose and evidence below. Not reported means no validated row in this snapshot; it does not imply disabled or passed. A dash means the check has no active mode in this snapshot. Custom controls may contribute to totals without publishing their private names.</p><div class="checks-table-wrap" role="region" aria-label="Individual checks" tabindex="0"><table class="checks-table"><caption>Check results and policy modes for this snapshot</caption><thead><tr><th scope="col">Check</th><th scope="col">Result</th><th scope="col" class="mode-cell">Mode</th></tr></thead>' + ''.join(groups) + '</table></div></section>'
+    # Stable sort: checks needing attention first, then passes, each in catalog order.
+    order = (*_ATTENTION_STATUSES, "passed")
+    active = ''.join(card for _, card in sorted(active_details, key=lambda item: order.index(item[0])))
+    inactive = ''.join(card for _, card in inactive_details)
+    details = '<section class="checks" aria-labelledby="check-details-title"><h2 id="check-details-title">Check details</h2><p class="checks-intro">Checks needing attention come first. Source report links open the evaluation run containing the detailed evidence.</p>' + active
+    if inactive:
+        details += f'<h3 class="inactive-title" id="inactive-title">Checked elsewhere, not activated, or not reported <span>({len(inactive_details)})</span></h3><p class="checks-intro">{_inactive_intro(inactive_details)}</p><div class="inactive-grid">{inactive}</div>'
+    return overview + details + '</section>'
+
+
+
+def _breakdown_markdown(breakdown: dict[str, Any]) -> str:
+    if breakdown["availability"] != "available":
+        return "Result breakdown unavailable: this source does not contain complete, consistent control results."
+    lines = ["| Evidence results | Passed | Failed | Blocked | Unverified |", "| --- | ---: | ---: | ---: | ---: |"]
+    for key, label in (("overall", "All active controls"), ("enforced", "Enforced"), ("advisory", "Advisory")):
+        counts = breakdown[key]
+        lines.append(f"| {label} | {counts['passed']} | {counts['failed']} | {counts['blocked']} | {counts['unverified']} |")
+    return "\n".join(lines)
+
+
+def _breakdown_html(breakdown: dict[str, Any]) -> str:
+    heading = '<section class="scope-panel" aria-labelledby="results-title"><h2 id="results-title">Evidence results</h2>'
+    if breakdown["availability"] != "available":
+        return heading + '<p>Result breakdown unavailable: this source does not contain complete, consistent control results.</p></section>'
+    rows = []
+    for key, label in (("overall", "All active controls"), ("enforced", "Enforced"), ("advisory", "Advisory")):
+        counts = breakdown[key]
+        rows.append(f'<tr><th scope="row">{label}</th><td>{counts["passed"]}</td><td>{counts["failed"]}</td><td>{counts["blocked"]}</td><td>{counts["unverified"]}</td></tr>')
+    return heading + '<div class="size-table-wrap" role="region" aria-label="Evidence results" tabindex="0"><table class="size-table"><caption>Control outcomes, separated from unavailable evidence</caption><thead><tr><th scope="col">Controls</th><th scope="col">Passed</th><th scope="col">Failed</th><th scope="col">Blocked</th><th scope="col">Unverified</th></tr></thead><tbody>' + ''.join(rows) + '</tbody></table></div><p>Failed means a reported failure. Blocked means the producer reported a blocker. Unverified means no usable result was available.</p></section>'
+
+
+_SIZE_GUIDANCE = "Large PRs can overwhelm human reviewers; smaller, focused PRs make feedback more actionable."
+
+
+_SCOPE_ROWS = (
+    ("files", "max_files", "Counted files"),
+    ("added_lines", "max_added_lines", "Added lines"),
+    ("changed_lines", "max_changed_lines", "Added + deleted lines"),
+    ("max_added_lines_per_file", "max_added_lines_per_file", "Most added lines in one file"),
+)
+_SCOPE_METRICS = (
+    "files", "added_lines", "changed_lines", "max_added_lines_per_file",
+    "binary_files", "total_files", "total_added_lines", "total_changed_lines",
+    "excluded_files", "excluded_added_lines", "excluded_changed_lines",
+    "excluded_binary_files",
+)
+
+
+def _change_scope(document: dict[str, Any]) -> dict[str, Any]:
+    # Optional measurements cannot invalidate an otherwise valid scorecard.
+    # Malformed data is never rendered as a passing or zero-sized change.
+    try:
+        return _validated_change_scope(document)
+    except (ValueError, TypeError, KeyError):
+        return {"availability": "unavailable"}
+
+
+def _validated_change_scope(document: dict[str, Any]) -> dict[str, Any]:
+    """Project only bounded aggregate measurements from the selected producer."""
+    unavailable = {"availability": "unavailable"}
+    controls = document.get("controls", [])
+    if not isinstance(controls, list):
+        return unavailable
+    rows = [row for row in controls if isinstance(row, dict) and row.get("id") == "change-scope"]
+    if not rows:
+        return unavailable
+    if len(rows) != 1:
+        raise ValueError("duplicate change-scope controls")
+    row = rows[0]
+    provider = row.get("authoritative_provider") or {}
+    result = row.get("authoritative_result") or {}
+    mode = row.get("effective_mode")
+    if (not isinstance(provider, dict) or provider.get("id") != "repository-change-scope"
+            or mode not in {"advisory", "enforced"}
+            or not isinstance(result, dict)
+            or row.get("evidence_status") not in {"passed", "failed"}):
+        return unavailable
+    scope = result.get("change_scope")
+    if scope is None:
+        return unavailable
+    if not isinstance(scope, dict) or type(scope.get("version")) is not int or scope["version"] != 1:
+        raise ValueError("change_scope must use version 1")
+    raw_metrics, raw_limits = scope.get("metrics"), scope.get("thresholds")
+    if not isinstance(raw_metrics, dict) or not isinstance(raw_limits, dict):
+        raise ValueError("change_scope requires metrics and thresholds")
+    metrics = {key: _integer(raw_metrics.get(key), f"change_scope.{key}") for key in _SCOPE_METRICS}
+    limits = {key: _integer(raw_limits.get(key), f"change_scope.{key}", positive=True) for _, key, _ in _SCOPE_ROWS}
+    if any(value > 2**53 - 1 for value in (*metrics.values(), *limits.values())):
+        raise ValueError("change_scope measurements exceed the supported bound")
+    for key in ("files", "added_lines", "changed_lines"):
+        if metrics[f"total_{key}"] != metrics[key] + metrics[f"excluded_{key}"]:
+            raise ValueError("change_scope aggregate totals are inconsistent")
+    for prefix in ("", "excluded_"):
+        files = metrics[f"{prefix}files"]
+        binary = metrics[f"{prefix}binary_files"]
+        added = metrics[f"{prefix}added_lines"]
+        changed = metrics[f"{prefix}changed_lines"]
+        if binary > files or added > changed or (files == binary and changed != 0):
+            raise ValueError("change_scope measurements are inconsistent")
+    maximum = metrics["max_added_lines_per_file"]
+    text_files = metrics["files"] - metrics["binary_files"]
+    if maximum > metrics["added_lines"] or metrics["added_lines"] > maximum * text_files:
+        raise ValueError("change_scope per-file measurements are inconsistent")
+    exceeded = any(metrics[key] > limits[limit] for key, limit, _ in _SCOPE_ROWS)
+    status = "failed" if exceeded else "passed"
+    if result.get("status") != status or row.get("evidence_status") != status:
+        raise ValueError("change_scope status does not match its measurements")
+    return {"availability": "available", "mode": mode, "status": status,
+            "metrics": metrics, "thresholds": limits}
+
+
+def _scope_markdown(scope: dict[str, Any]) -> str:
+    title = "\n## PR Size · Files & LOC\n\n" + _SIZE_GUIDANCE + "\n\n"
+    if scope["availability"] != "available":
+        return title + "Measurements unavailable. This source does not contain validated PR size measurements.\n"
+    metrics, limits = scope["metrics"], scope["thresholds"]
+    meaning = "Advisory — warns only; does not block the policy decision." if scope["mode"] == "advisory" else "Enforced — exceeding a limit blocks the policy decision."
+    lines = [title + meaning, "", "| Measurement | Counted | Limit | Result |", "| --- | ---: | ---: | --- |"]
+    for key, limit, label in _SCOPE_ROWS:
+        state = "Above limit" if metrics[key] > limits[limit] else "Within limit"
+        lines.append(f"| {label} | {metrics[key]} | {limits[limit]} | {state} |")
+    lines += ["", f"Total: {metrics['total_files']} files; {metrics['total_added_lines']} added lines; {metrics['total_changed_lines']} added + deleted lines.",
+              f"Excluded: {metrics['excluded_files']} files; {metrics['excluded_added_lines']} added lines; {metrics['excluded_changed_lines']} added + deleted lines.",
+              f"Binary files: {metrics['binary_files']} counted; {metrics['excluded_binary_files']} excluded. Binary contents have no line count."]
+    return "\n".join(lines) + "\n"
+
+
+def _scope_html(scope: dict[str, Any]) -> str:
+    # Rendered inside the PR Size check card, so it is a subsection: no repeated
+    # title, and the card's mode label already states advisory versus enforced.
+    heading = '<section class="scope-block" aria-labelledby="size-title"><h4 id="size-title" tabindex="-1">Files &amp; lines of code</h4>' + f'<p>{_SIZE_GUIDANCE}</p>'
+    if scope["availability"] != "available":
+        return heading + '<p><strong>Measurements unavailable</strong></p><p>This source does not contain validated PR size measurements. No size verdict is available; missing measurements are not a pass.</p></section>'
+    metrics, limits = scope["metrics"], scope["thresholds"]
+    advisory = scope["mode"] == "advisory"
+    meaning = "Exceeding a limit warns only; it does not block the policy decision." if advisory else "Exceeding a limit blocks the policy decision."
+    rows = []
+    for key, limit, label in _SCOPE_ROWS:
+        exceeded = metrics[key] > limits[limit]
+        tone = ("caution" if advisory else "danger") if exceeded else "good"
+        state = "Above limit" if exceeded else "Within limit"
+        rows.append(f'<tr><th scope="row">{label}</th><td>{metrics[key]:,}</td><td>{limits[limit]:,}</td><td><span class="size-result {tone}">{state}</span></td></tr>')
+    return heading + f'''<p class="scope-mode">{meaning}</p>
+<div class="size-table-wrap" role="region" aria-label="PR size measurements" tabindex="0"><table class="size-table"><caption>Counted changes compared with the configured limits</caption><thead><tr><th scope="col">Measurement</th><th scope="col">Counted</th><th scope="col">Limit</th><th scope="col">Result</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>
+<div class="scope-totals"><p><strong>Total diff</strong><br>{metrics['total_files']:,} files · {metrics['total_added_lines']:,} added lines · {metrics['total_changed_lines']:,} added + deleted lines</p><p><strong>Excluded from limits</strong><br>{metrics['excluded_files']:,} files · {metrics['excluded_added_lines']:,} added lines · {metrics['excluded_changed_lines']:,} added + deleted lines</p></div>
+<p class="size-footnote">Counted changes exclude the configured path patterns. Binary files: {metrics['binary_files']:,} counted; {metrics['excluded_binary_files']:,} excluded. Binary contents have no line count. File paths are not published.</p></section>'''
+
+
 def _validated_scorecard(source_dir: Path) -> dict[str, Any]:
     json_path, _ = _bounded_source(source_dir)
     try:
@@ -185,6 +993,9 @@ def _validated_scorecard(source_dir: Path) -> dict[str, Any]:
         "passed": passed,
         "total": total,
         "subject_revision": revision,
+        "change_scope": _change_scope(document),
+        "result_breakdown": _result_breakdown(document),
+        "controls": _control_details(document),
     }
 
 
@@ -241,6 +1052,9 @@ def _public_metadata(
         "enforced": inspected["enforced"],
         "advisory": inspected["advisory"],
         "pages_url": pages_base_url(repository),
+        "change_scope": inspected["change_scope"],
+        "result_breakdown": inspected["result_breakdown"],
+        "controls": inspected["controls"],
     }
 
 
@@ -267,10 +1081,30 @@ def _svg(metadata: dict[str, Any]) -> str:
 """
 
 
+_ALLOW_MEANING = "ALLOW means the enforced controls are satisfied for this snapshot. It does not establish mergeability or release readiness."
+_UNGATED_MEANING = ("No enforced controls are configured, so the policy decision is not gated by any control "
+                    "and every result is advisory. It does not establish mergeability or release readiness.")
+_BLOCK_MEANING = "BLOCK means at least one enforced control did not pass for this snapshot."
+
+
+def _collection_note(controls: list[dict[str, Any]]) -> str:
+    if any(row["measurements"]["availability"] == "available" for row in controls):
+        return ("Test totals, coverage, validator counts, and scanner finding counts, where shown, are self-reported by "
+                "the pull request's own workflow run and are not independently verified. A scanner card without counts "
+                "says where that scanner keeps its findings.")
+    return "Test totals, security finding counts, and coverage percentages are not collected in this summary."
+
+
+def _decision_meaning(metadata: dict[str, Any]) -> str:
+    if metadata["decision"] == "block":
+        return _BLOCK_MEANING
+    return _UNGATED_MEANING if metadata["enforced"]["total"] == 0 else _ALLOW_MEANING
+
+
 def _markdown(metadata: dict[str, Any]) -> str:
     return f"""# Latest PR Scorecard
 
-![{metadata["message"]}](guardrails-badge.svg)
+![{metadata["message"]}](proof-badge.svg)
 
 | Field | Value |
 | --- | --- |
@@ -284,6 +1118,16 @@ def _markdown(metadata: dict[str, Any]) -> str:
 | Source created | {metadata["source_run_created_at"]} |
 | Published | {metadata["published_at"]} |
 | Subject digest | {metadata["subject_digest"]} |
+
+{_breakdown_markdown(metadata["result_breakdown"])}
+
+Failed means a reported failure. Blocked means the producer reported a blocker. Unverified means no usable result was available.
+
+{_decision_meaning(metadata)}
+This is a published PR snapshot. The source timestamp does not prove it matches the current PR head or current main.
+{_collection_note(metadata["controls"])}
+{_scope_markdown(metadata["change_scope"])}
+{_controls_markdown(metadata["controls"])}
 """
 
 
@@ -321,6 +1165,7 @@ h1{margin:0;font-size:clamp(30px,4.5vw,42px);font-weight:650;line-height:1.2;let
 .decision{text-align:right;flex-shrink:0}
 .decision dt{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px}
 .decision dd{color:var(--tone);margin:4px 0 0;font-size:20px;font-weight:750}
+.metrics-note{margin:12px 2px 0;color:var(--muted);font-size:13px}
 .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .metric{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:24px}
 .metric h2{margin:0 0 12px;font-size:13px;font-weight:650;color:var(--muted)}
@@ -330,6 +1175,49 @@ h1{margin:0;font-size:clamp(30px,4.5vw,42px);font-weight:650;line-height:1.2;let
 .track{height:6px;border-radius:5px;background:#e8eeee;overflow:hidden}
 .fill{height:100%;background:var(--tone);border-radius:5px}
 .metric-note{color:var(--tone);font-size:12px;font-weight:650;margin:10px 0 0}
+.scope-panel{margin-top:24px;padding:28px;background:var(--paper);border:1px solid var(--line);border-radius:12px}
+.scope-panel h2{margin:0;font-size:24px;letter-spacing:-.5px}
+.scope-panel p{color:var(--muted);font-size:13px}
+.scope-mode{font-weight:650}
+.size-table-wrap{overflow-x:auto}.size-table-wrap:focus-visible{outline:3px solid #227b92;outline-offset:3px}
+.size-table{width:100%;border-collapse:collapse;font-size:13px}
+.size-table caption{text-align:left;color:var(--muted);padding:8px 0 12px}
+.size-table th,.size-table td{text-align:left;padding:13px 10px;border-bottom:1px solid var(--line)}
+.size-table thead{background:var(--canvas)}
+.size-table td:nth-child(2),.size-table td:nth-child(3){font-variant-numeric:tabular-nums}
+.size-result{display:inline-block;white-space:nowrap;padding:3px 9px;border-radius:5px;background:var(--wash);color:var(--tone);font-weight:650}
+.scope-totals{display:grid;grid-template-columns:1fr 1fr;gap:20px}.scope-totals strong{color:var(--ink)}
+.size-footnote{margin-bottom:0}
+.scope-block{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.scope-block h4{margin:0;font-size:14px;line-height:1.4;color:var(--ink)}
+.check-detail .scope-block p{margin:6px 0 0}.check-detail .scope-block .scope-mode{color:var(--ink);font-weight:600}
+.check-detail .scope-block .size-footnote{margin-top:12px}
+.checks{margin-top:36px}.checks h2{font-size:28px;margin:0}.checks-intro{color:var(--muted);max-width:850px;font-size:14px}
+.checks-table-wrap{overflow-x:auto}.checks-table-wrap:focus-visible{outline:3px solid #227b92;outline-offset:3px}
+.attention{margin:0 0 22px;padding:20px 24px;background:var(--paper);border:1px solid var(--line);border-radius:12px}
+.attention h2{margin:0 0 10px;font-size:15px}.attention ul{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:14px}
+.attention .size-result{font-size:11px;padding:2px 7px;min-width:78px;text-align:center}.attention-mode{color:var(--muted);font-size:12px}
+.attention-private{color:var(--muted);font-size:13px}
+.decision .decision-note{color:var(--muted);font-size:11px;font-weight:600;margin-top:2px}
+.checks-table{width:100%;border-collapse:collapse;background:var(--paper);font-size:13px}
+.checks-table caption{text-align:left;color:var(--muted);font-size:12px;padding:0 0 10px}
+.checks-table th,.checks-table td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.checks-table thead{background:#e8eeee}.checks-table tbody th[scope="row"]{font-weight:550}
+.checks-table .check-category th{background:#edf3f3;color:var(--accent);font-size:12px;padding-block:10px}
+.check-id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:400;color:var(--muted);margin-left:6px}
+.checks-table .size-result{font-size:11px;padding:2px 7px}.checks-table tbody tr:not(.check-category):hover{background:#f5f9f9}
+.assessment-table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}.assessment-table caption{text-align:left;color:var(--muted);font-size:12px;padding-bottom:8px}.assessment-table th,.assessment-table td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:10px 8px}.assessment-table th{width:180px;font-weight:600}.assessment-table td{overflow-wrap:anywhere}
+.check-detail,#checks-title,#size-title{scroll-margin-top:24px}#size-title:focus{outline:2px solid var(--accent);outline-offset:4px}.check-detail:focus,#checks-title:focus{outline:2px solid var(--accent);outline-offset:4px}
+.check-detail{margin-top:16px;padding:22px;border:1px solid var(--line);border-top:3px solid var(--tone);border-radius:10px;background:var(--paper);display:flex;flex-direction:column}
+.check-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.check-top h3{font-size:16px;line-height:1.4;margin:0}.check-top .size-result{font-size:11px}
+.check-detail p{font-size:13px;color:var(--muted);margin:12px 0 0}.check-detail .check-mode{font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.6px;color:var(--ink)}
+.check-detail .check-note{font-size:12px}.check-detail .check-run{font-size:12px;color:var(--ink)}
+.check-detail .check-measure{font-size:13px;color:var(--ink);padding:10px 12px;background:var(--canvas);border-radius:8px}
+.check-measure span{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.criteria{border:0;padding:12px 0 0;font-size:12px}.criteria summary{color:var(--accent)}
+.inactive-title{margin:32px 0 0;font-size:18px}.inactive-title span{color:var(--muted);font-weight:500}
+.inactive-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}
+.inactive-grid .check-detail{padding:16px 18px;border-top-width:1px}.check-links{display:flex;flex-wrap:wrap;gap:16px;padding-top:16px;margin-top:auto;font-size:12px}
 .evidence{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:36px;padding:30px;margin-top:24px;background:var(--paper);border:1px solid var(--line);border-radius:12px}
 .evidence h2{margin:0 0 8px;font-size:18px;letter-spacing:-.3px}
 .evidence p{color:var(--muted);font-size:13px;margin:0 0 20px;max-width:420px}
@@ -357,6 +1245,12 @@ footer img{display:block;max-width:100%;height:auto}
   .status-panel{align-items:flex-start;padding:20px;gap:16px}
   .status-panel h2{font-size:18px}.decision dd{font-size:17px}
   .metrics{grid-template-columns:1fr;gap:12px}
+  .check-detail{padding:18px}.checks-table th,.checks-table td{padding:7px 9px;white-space:normal}
+  .checks-table .check-id{display:block;margin:2px 0 0}.checks-table .mode-cell{display:none}
+  .attention{padding:18px}.inactive-grid{grid-template-columns:1fr}
+  .scope-panel{padding:20px}.scope-totals{grid-template-columns:1fr;gap:0}
+  .size-table{font-size:12px}
+  .size-table th,.size-table td{padding:10px 5px}
   .metric{padding:20px}.count-caption{margin-bottom:14px}
   .evidence{grid-template-columns:1fr;gap:26px;padding:22px}
   .source-facts div{grid-template-columns:95px minmax(0,1fr);gap:12px}
@@ -394,6 +1288,7 @@ def _html(metadata: dict[str, Any]) -> str:
   <div class="track" aria-hidden="true"><div class="fill" style="width:{percent:.2f}%"></div></div>
   <p class="metric-note">{note}</p>
 </section>""")
+    ungated = '<dd class="decision-note">Advisory only</dd>' if not metadata["enforced"]["total"] else ''
     timestamps = {
         key: datetime.fromisoformat(str(metadata[key]).replace("Z", "+00:00"))
         .astimezone(timezone.utc)
@@ -411,8 +1306,8 @@ def _html(metadata: dict[str, Any]) -> str:
 <body>
 <a class="skip-link" href="#scorecard">Skip to scorecard</a>
 <header class="topbar"><div class="shell">
-  <div class="brand"><span class="brand-mark" aria-hidden="true">G</span><div>
-    <span class="brand-name">Guardrails</span><span class="repository">{safe['repository']}</span>
+  <div class="brand"><span class="brand-mark" aria-hidden="true">AI</span><div>
+    <span class="brand-name">AI Software Toolkit</span><span class="repository">{safe['repository']}</span>
   </div></div>
   <a class="repo-link" href="https://github.com/{safe['repository']}">View repository <span aria-hidden="true">↗</span></a>
 </div></header>
@@ -422,10 +1317,14 @@ def _html(metadata: dict[str, Any]) -> str:
   <p class="intro">A clear view of the latest published pull-request evaluation.</p>
   <section class="status-panel {tone}" aria-label="Scorecard status">
     <div><div class="status-label"><span class="status-dot" aria-hidden="true"></span>{safe['status']}</div>
-      <h2>{headline}</h2><p>The policy decision is based on enforced controls.</p></div>
-    <dl class="decision"><dt>Policy decision</dt><dd>{safe['decision'].upper()}</dd></dl>
+      <h2>{headline}</h2><p>{_decision_meaning(metadata)}</p></div>
+    <dl class="decision"><dt>Policy decision</dt><dd>{safe['decision'].upper()}</dd>{ungated}</dl>
   </section>
+  {_attention_html(metadata["controls"], metadata["result_breakdown"])}
   <div class="metrics">{''.join(cards)}</div>
+  <p class="metrics-note">{html.escape(_count_reconciliation(metadata))} <a href="#checks-title">See all checks ↓</a></p>
+  {_breakdown_html(metadata["result_breakdown"])}
+  {_controls_html(metadata["controls"], metadata["source_run_url"], metadata["change_scope"])}
   <section class="evidence" aria-labelledby="evidence-title">
     <div><h2 id="evidence-title">Trace it to the evidence</h2>
       <p>Open the source CI run for the full scorecard, individual controls, and supporting results.</p>
@@ -440,13 +1339,13 @@ def _html(metadata: dict[str, Any]) -> str:
   </section>
   <aside class="scope-note"><span class="note-mark" aria-hidden="true">ⓘ</span>
     <p><strong>A PR snapshot, not an assessment of current main.</strong> Counts show controls with passing evidence.
-    “Not passed” includes failed, missing, or unresolved results. Advisory gaps do not block the policy decision;
-    repository merge requirements may apply separately.</p>
+    The source timestamp does not prove this matches the current PR head. Advisory gaps do not block the policy decision.
+    {_collection_note(metadata["controls"])}</p>
   </aside>
   <details><summary>Verification details</summary>
     <p class="digest">Subject digest<code>{safe['subject_digest']}</code></p>
   </details>
-  <footer><img src="guardrails-badge.svg" alt="{safe['message']}" width="216" height="20">
+  <footer><img src="proof-badge.svg" alt="{safe['message']}" width="216" height="20">
     <nav class="formats" aria-label="Report formats"><a href="scorecard.json">Summary JSON</a><a href="scorecard.md">Summary Markdown</a></nav>
   </footer>
 </main>
@@ -522,7 +1421,7 @@ def render_badge(
             source_run_created_at,
             expected_revision,
         )
-        (temporary / "guardrails-badge.svg").write_text(
+        (temporary / "proof-badge.svg").write_text(
             _svg(metadata), encoding="utf-8"
         )
         (temporary / "scorecard.json").write_text(
@@ -540,7 +1439,7 @@ def render_badge(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Render a bounded public Guardrails scorecard badge"
+        description="Render a bounded public Proof scorecard badge"
     )
     parser.add_argument("--source-dir", required=True, type=Path)
     mode = parser.add_mutually_exclusive_group(required=True)

@@ -1,8 +1,8 @@
-# SkrillX: vision and scope
+# AI Software Toolkit: vision and scope
 
-SkrillX helps development, QA, security, and release teams turn
+AI Software Toolkit helps development, QA, security, and release teams turn
 AI-assisted work into software they can verify and maintain. It brings shared
-skills, standards, verification workflows, and the Guardrails evidence runtime
+skills, standards, verification workflows, and the Proof evidence runtime
 together. Teams adopt the components that fit their repository and workflow.
 
 This document describes direction and maturity. It does not introduce new
@@ -15,7 +15,7 @@ enforced controls or promise delivery dates.
 | Plan | Define user outcomes, acceptance criteria, risks, and testability with QA involved early | [Spec-driven development](../skills/spec-driven-development/SKILL.md), [safe change preparation](../skills/prepare-safe-change/SKILL.md) |
 | Build | Implement scoped changes, review design, and preserve application contracts | [Code review](../skills/code-review/SKILL.md), [dependency remediation](../skills/dependency-remediation/SKILL.md) |
 | Validate | Combine automated checks with exploratory judgment and evidence from user flows | [QA bootstrap](../skills/qa-bootstrap/SKILL.md), [test-gap analysis](../skills/test-gap-finder/SKILL.md), [testing policy](../policies/testing.md) |
-| Release | Assess readiness, examine evidence, and follow the application's release authority | [Release readiness](../skills/release-readiness/SKILL.md), [Guardrails](guardrails/README.md) |
+| Release | Assess readiness, examine evidence, and follow the application's release authority | [Release readiness](../skills/release-readiness/SKILL.md), [Proof](proof/README.md) |
 | Improve | Investigate failures, refine acceptance criteria, and improve future verification | [Bug investigation](../skills/bug-hunter/SKILL.md), QA learned failure modes, prospective delivery measurement |
 
 These activities are connected, not sequential handoffs between departments.
@@ -29,21 +29,32 @@ Agents assist; accountable people own decisions and outcomes.
 - **Standards** define expectations and security boundaries.
 - **Skills** guide agents through repeatable tasks using repository ground truth.
 - **Verification** produces observations from tests, QA sessions, and scanners.
-- **Guardrails** evaluates provider evidence for the exact subject and selected
-  policy. Its architecture and public runtime remain [Guardrails v2](guardrails/architecture.md).
+- **Proof** evaluates provider evidence for the exact subject and selected
+  policy. Its architecture and public runtime remain [Proof](proof/architecture.md).
 - **Measurement**, a future area of work, would connect delivery outcomes to
   improvements in the preceding activities.
 
 ## What exists and what remains aspirational
 
-| Area | Current maturity | What adoption still requires |
+Three labels, checked against the source tree at each release:
+**shipped** (in `main`, tested, documented), **opt-in** (shipped but inactive
+until a consumer configures it and observes a run), and **planned** (not in
+the tree; no date promised).
+
+| Area | Status | What adoption still requires |
 | --- | --- | --- |
-| Guardrails Core and GitHub integration | Available runtime, installer, providers, and workflow configuration; the README demo pins v1.0.0 | Real consumer commands, applicable credentials/settings, and observed evidence |
-| Shared skills | Source catalog with a separate [skills installer](../skills/README.md#install-locally) | Choose a revision containing the desired skill and supply application context; installation is not execution |
-| Agent-driven functional QA | Newer source capability recorded under [Unreleased](../CHANGELOG.md#unreleased), outside default profiles | Run QA bootstrap, configure usable drivers and environments, execute generated QA, and inspect its evidence; it is not part of the v1.0.0 demo |
-| AI security guidance | Policy covering agent authority, data, tools, memory, and verification | Configure and verify actual agent/runtime protections; policy text does not enable them |
-| Release and runtime assurance | Readiness skills exist; several lifecycle capabilities remain [evidence-only contracts](guardrails/architecture.md#evidence-only-lifecycle-capabilities) | Implement and validate the missing producers before claiming runtime assurance |
-| DORA and AI delivery diagnostics | Aspiration; no measurement pipeline or dashboard is established by this documentation | Define service boundaries and data sources, implement collection, and validate attribution and completeness |
+| Proof Core and GitHub profile | Shipped; the README demo pins v1.0.0 | Real consumer commands as repository variables, applicable settings, and observed evidence |
+| `skrillx` CLI (`discover`, `init`, `doctor`, `check`, `providers`, `skills`, `qa`, `update`) | Shipped in source under [Unreleased](../CHANGELOG.md#unreleased); the `skrillx.pyz` release asset is planned | Run `init` and commit `toolkit.toml` / `toolkit.lock.json`; `verified` in `doctor` comes only from revision-bound evidence |
+| External providers: SonarQube, Snyk Code, Snyk Open Source, FOSSA | Opt-in; templates and the adapter are shipped, contract tests pass, **no adapter is live-verified** ([ledger](providers/verification.md)) | Copy the template, add the credential, select the provider, verify a representative PR, record the ledger row |
+| Semgrep AppSec Platform, Codex Code Review, AI review adapters | Opt-in provider definitions; Semgrep and Codex rely on platform integrations, the others on repository-owned commands | A reviewed integration or command and a verified exact-head check; AI review stays advisory-only |
+| Runtime soak | Awaiting an environment-evidence producer and collection path | Scheduled or dispatched checks alone cannot satisfy the environment evidence contract; the PR reporter collects git-commit evidence only |
+| Review skills (code, security, dependency, release, and others) | Shipped source catalog with installers for Codex and Claude Code | Choose a revision, install, supply application context; installation is not execution |
+| Action skills (`fix-ci`, `generate-unit-tests`, `fix-security-finding`, `dependency-upgrade`, `address-pr-findings`) | Shipped with fixtures and ledgers; **not verified in either client yet** | A recorded live run per client in each skill's `VERIFICATION.md` |
+| Agent-driven functional QA | Opt-in; `qa-bootstrap` shipped, plans and findings documented, FLAKY blocks | Run bootstrap, configure drivers and environments, execute the generated `qa`, inspect evidence; advisory-only |
+| Reference app | Python fixture exercises install, refresh, and local scorecards; nested CI templates are shipped but not live-verified. The separate Node reference app has its own evidence ([details](reference-app.md)); fixture QA and repair remain planned | Decide the lock refresh workflow before committing `toolkit.toml` to the demo |
+| AI security guidance | Shipped policy | Configure and verify actual agent/runtime protections; policy text does not enable them |
+| Release and runtime assurance | Readiness skills shipped; several lifecycle capabilities remain [evidence-only contracts](proof/architecture.md#evidence-only-lifecycle-capabilities) | Implement and validate the missing producers |
+| DORA and AI delivery diagnostics | Planned; no measurement pipeline or dashboard exists | Define service boundaries and data sources, implement collection, validate attribution |
 
 Source availability, release availability, consumer configuration, and a
 successful observed run are distinct. Consult the changelog for the revision
@@ -54,7 +65,7 @@ QA bootstrap generates a consumer-owned orchestrator, per-app skills, and
 optional execution/reporting workflows. The generated QA skill runs the flows;
 bootstrap itself does not validate the application. Functional QA is opt-in
 and advisory-only under the current provider contract. AI review also remains
-advisory-only. Other controls follow the existing [promotion rules](guardrails/control-status.md).
+advisory-only. Other controls follow the existing [promotion rules](proof/control-status.md).
 
 ## Aspiration: learn from delivery outcomes
 

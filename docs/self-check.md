@@ -1,6 +1,6 @@
 # Run the toolkit against this repository
 
-This repository consumes its installed Guardrails runtime. From a clean,
+This repository consumes its installed Proof runtime. From a clean,
 committed checkout, run:
 
 ```sh
@@ -32,12 +32,13 @@ a working branch or use an isolated committed snapshot first. A snapshot scan
 proves only that snapshot, not the original checkout, a merged change, or a
 published release. Ignored artifacts do not make the checkout dirty.
 
-The launcher uses `.guardrails/scan.py` from the repository root and explicitly
-selects this repository's installed `.guardrails/policy.yaml`, `profiles.yaml`,
-`control-catalog.yaml`, and `providers.yaml`. This preserves the repository's
-enforced controls instead of using the shared advisory defaults in the source
-distribution. It binds these repository producers, overriding inherited command
-settings:
+The launcher uses `.proof/scan.py` from the repository root and explicitly
+selects this repository's installed `.proof/policy.yaml`, `profiles.yaml`,
+`control-catalog.yaml`, and `providers.yaml`. All active controls in this
+repository are advisory. Dependency remediation remains `not_activated`, and
+unselected providers are not activated by this policy. These scorecard policy
+modes do not change GitHub required-check rules. The launcher binds these
+repository producers, overriding inherited command settings:
 
 | Producer | Command |
 | --- | --- |
@@ -50,16 +51,18 @@ settings:
 The producers are executable scripts: run them directly (for example
 `tooling/test.sh`), not through `bash`, so the committed file modes stay honest.
 
-The no-migrations validator is deliberate: this toolkit has no application
-database. The scanner also invokes available repository, documentation,
+`tooling/test.sh` disables git's automatic background maintenance and gc for
+the test processes, so a detached git job cannot race the removal of a test's
+temporary repository. The no-migrations validator is deliberate: this toolkit
+has no application database. The scanner also invokes available repository, documentation,
 ground-truth, and change-scope validators. The launcher does not change policies,
 install hooks, make commits, push, or write GitHub settings.
 
 ## Reading the result
 
 The scanner prints artifact paths and writes timestamped evidence JSON and a
-Markdown scorecard in `.artifacts/guardrails/`, plus the latest evidence at
-`.artifacts/guardrails/evidence.json`. Inspect each producer's status and reason.
+Markdown scorecard in `.artifacts/proof/`, plus the latest evidence at
+`.artifacts/proof/evidence.json`. Inspect each producer's status and reason.
 Missing, skipped, or unconfigured producers are not passes. Local scans cannot
 supply GitHub-only provider evidence, so advisory gaps can remain.
 

@@ -1,106 +1,286 @@
 name: Snyk
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-  push:
-    branches: [main]
+# Adapter-owned Snyk workflow. The installed .proof/adapter.py decides the
+# command shape (`snyk code test` and `snyk test`) and maps exit codes to
+# evidence: 0 passed, 1 failed (findings), 2 blocked (error or authentication),
+# 3 not_run (no supported projects). Consumers supply arguments through the
+# SNYK_CODE_ARGS and SNYK_OPEN_SOURCE_ARGS repository variables, never the verb.
+# Set the SNYK_CODE_ENABLED or SNYK_OPEN_SOURCE_ENABLED repository variable to
+# "false" to skip a job whose provider is not selected.
+#
+# SNYK_TOKEN never shares a job or a runner with pull-request code. The
+# workflow runs on pull_request_target, so GitHub takes this file and the
+# .proof runtime from the default branch, and a pull request cannot edit what
+# receives the token. The token is a secret of the `proof-providers`
+# environment, whose deployment branches must be limited to the default
+# branch, so a pull_request or push workflow on any other ref cannot read it.
+# Each job reads the pull-request head as data only (`--data-only`): no setup
+# command, no dependency installation, no build tool. Snyk Open Source
+# therefore tests only lockfiles whose parsers run nothing, and reports not_run
+# with `requires-dependency-resolution` when the checkout needs a build tool or
+# package manager to resolve. Fork pull requests are withheld until the
+# fork-scanning boundary has been independently verified.
+#
+# Each job posts the check named in the provider contract ("Snyk Code",
+# "Snyk Open Source") for the pull-request head, with the external id
+# proof:<provider>:<run id>:<head sha>, and uploads the same result as the
+# run-bound artifact proof-<provider>-<run id>. The Proof collector reads the
+# result from that artifact. The job's own check has a different name so it is
+# never mistaken for the provider check, and any non-passing result also fails
+# the job. The adapter also writes finding counts by severity, which travel in
+# the same artifact; they never change the result.
 
-permissions:
-  contents: read
-  security-events: write
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
 
 concurrency:
-  group: snyk-${{ github.workflow }}-${{ github.ref }}
+  group: snyk-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-jobs:
-  code:
-    name: Snyk Code
-    needs: configuration
-    if: ${{ needs.configuration.outputs.configured == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Install Snyk CLI
-        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04 # v1.0.0
-      - name: Scan source code with Snyk Code
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk code test --severity-threshold=high --sarif-file-output=snyk-code.sarif
-      - name: Upload Snyk Code results
-        if: ${{ always() && hashFiles('snyk-code.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
-        with:
-          sarif_file: snyk-code.sarif
+permissions: {}
 
-  open-source:
-    name: Snyk Open Source
-    needs: configuration
-    if: ${{ needs.configuration.outputs.configured == 'true' }}
+env:
+  SNYK_CLI_VERSION: 1.1307.4
+  SNYK_CLI_SHA256: b0baee4fa4d7d11b7df927a1046cf8137a8a89fafac8101a45c3c0e0777ddc35
+
+jobs:
+  snyk-code:
+    name: Snyk Code scan
+    if: ${{ vars.SNYK_CODE_ENABLED != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
+    environment:
+      name: proof-providers
+      deployment: false
+    permissions:
+      contents: read
+      checks: write
+    env:
+      PROVIDER_ID: snyk-code
+      CHECK_NAME: Snyk Code
+      CONTROL_ID: deep-sast
+      SNYK_CODE_ARGS: ${{ vars.SNYK_CODE_ARGS }}
+      PROOF_WORKING_DIRECTORY: ${{ vars.PROOF_WORKING_DIRECTORY || '.' }}
+      WITHHELD: ${{ github.event.pull_request.head.repo.full_name != github.repository && 'fork pull requests are not sent to Snyk because fork scanning has not been independently verified.' || '' }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      BASE_REF: refs/heads/${{ github.event.pull_request.base.ref }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the trusted runtime from the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
+          path: trusted
+          fetch-depth: 1
           persist-credentials: false
-      - name: Detect dependency manifests
-        id: manifests
+          sparse-checkout: |
+            .proof/adapter.py
+            .proof/provider_check.py
+            .proof/evaluate.py
+          sparse-checkout-cone-mode: false
+      - name: Require the trusted runtime
         shell: bash
         run: |
           set -euo pipefail
-          if find . -type f \( \
-            -name 'package.json' -o -name 'package-lock.json' -o \
-            -name 'requirements.txt' -o -name 'pyproject.toml' -o \
-            -name 'poetry.lock' -o -name 'go.mod' -o -name 'pom.xml' -o \
-            -name 'build.gradle' -o -name 'Gemfile.lock' \
-          \) -not -path './.git/*' -print -quit | grep -q .; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Install Snyk CLI
-        if: ${{ steps.manifests.outputs.found == 'true' }}
-        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04 # v1.0.0
-      - name: Scan open-source dependencies
-        if: ${{ steps.manifests.outputs.found == 'true' }}
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --all-projects --severity-threshold=high --sarif-file-output=snyk-open-source.sarif
-      - name: Report no dependency manifest
-        if: ${{ steps.manifests.outputs.found != 'true' }}
-        run: echo "No supported dependency manifest found; Snyk Open Source is not applicable to this repository revision."
-      - name: Upload Snyk Open Source results
-        if: ${{ always() && hashFiles('snyk-open-source.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+          for file in adapter.py provider_check.py; do
+            if [[ -L trusted/.proof || -L "trusted/.proof/${file}" || ! -f "trusted/.proof/${file}" ]]; then
+              echo "::error::The default branch has no regular .proof/${file}; refresh the Proof runtime (tooling/install.py --refresh-existing) and merge it before this check can produce evidence." >&2
+              exit 1
+            fi
+          done
+      - name: Check out the pull request head as data
+        if: ${{ env.WITHHELD == '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          sarif_file: snyk-open-source.sarif
-
-  configuration:
-    name: Snyk Configuration
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
-    outputs:
-      configured: ${{ steps.check.outputs.configured }}
-    steps:
-      - name: Verify Snyk token
-        id: check
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      # Install the native executable directly: the setup action's eval wrapper
+      # would interpret shell syntax in candidate-controlled lockfile paths.
+      - name: Install the pinned Snyk CLI
+        if: ${{ env.WITHHELD == '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/snyk-cli"
+          curl --fail --silent --show-error --location \
+            --output "${RUNNER_TEMP}/snyk-cli/snyk" \
+            "https://github.com/snyk/cli/releases/download/v${SNYK_CLI_VERSION}/snyk-linux"
+          echo "${SNYK_CLI_SHA256}  ${RUNNER_TEMP}/snyk-cli/snyk" | sha256sum --check --strict
+          chmod +x "${RUNNER_TEMP}/snyk-cli/snyk"
+          echo "${RUNNER_TEMP}/snyk-cli" >> "${GITHUB_PATH}"
+      - name: Run Snyk Code through the trusted adapter
+        if: ${{ env.WITHHELD == '' }}
+        shell: bash
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
+          set -uo pipefail
+          # A minimal environment: the adapter and the CLI receive the credential and nothing else of the job.
+          /usr/bin/env -i \
+            PATH="${PATH}" HOME="${HOME}" CI=true \
+            SNYK_TOKEN="${SNYK_TOKEN}" SNYK_CODE_ARGS="${SNYK_CODE_ARGS}" \
+            python3 -I trusted/.proof/adapter.py snyk-code --data-only \
+            --target "candidate/${PROOF_WORKING_DIRECTORY}" \
+            --revision "${HEAD_SHA}" \
+            --timeout 1200 \
+            --evidence-dir "${RUNNER_TEMP}/evidence" \
+            --measurements "${RUNNER_TEMP}/measurements.json" | /usr/bin/tee "${RUNNER_TEMP}/scan.txt"
+          printf '### Snyk Code\n\n```text\n%s\n```\n' "$(/bin/cat "${RUNNER_TEMP}/scan.txt")" >> "${GITHUB_STEP_SUMMARY}"
+      - name: Record the result
+        id: evidence
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
           set -euo pipefail
-          if [[ -z "${SNYK_TOKEN}" || "${SNYK_TOKEN}" == "GUARDRAILS_NOT_CONFIGURED" ]]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Snyk is an ORANGE advisory control until SNYK_TOKEN is configured."
-            echo "Replace the SNYK_TOKEN placeholder to activate Snyk Code and Snyk Open Source scans."
-            exit 0
+          if [[ -n "${WITHHELD}" ]]; then
+            source_args=(--withheld "${WITHHELD}")
+          else
+            source_args=(--fragment "${RUNNER_TEMP}/evidence/${PROVIDER_ID}.json")
           fi
-          echo "configured=true" >> "$GITHUB_OUTPUT"
-          echo "SNYK_TOKEN is configured; provider-backed scans may run."
+          python3 -I trusted/.proof/provider_check.py evidence \
+            --provider-id "${PROVIDER_ID}" --check-name "${CHECK_NAME}" "${source_args[@]}" \
+            --control "${CONTROL_ID}" --measurements "${RUNNER_TEMP}/measurements.json" \
+            --output "${RUNNER_TEMP}/proof-evidence/proof-evidence.json"
+          python3 -I trusted/.proof/provider_check.py check \
+            --evidence "${RUNNER_TEMP}/proof-evidence/proof-evidence.json" --output "${RUNNER_TEMP}/check-run.json"
+          jq -r '"\(.check_name): \(.status) — \(.summary)"' "${RUNNER_TEMP}/proof-evidence/proof-evidence.json" >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload run-bound evidence
+        if: ${{ !cancelled() && steps.evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: proof-snyk-code-${{ github.run_id }}
+          path: ${{ runner.temp }}/proof-evidence/proof-evidence.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Publish the Snyk Code check
+        if: ${{ !cancelled() && steps.evidence.outcome == 'success' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/check-runs" --input "${RUNNER_TEMP}/check-run.json" > /dev/null
+          # The provider check carries the verdict; this job fails too, so it never reads as a pass.
+          jq -e '.status == "passed"' "${RUNNER_TEMP}/proof-evidence/proof-evidence.json" > /dev/null
+
+  snyk-open-source:
+    name: Snyk Open Source scan
+    if: ${{ vars.SNYK_OPEN_SOURCE_ENABLED != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: proof-providers
+      deployment: false
+    permissions:
+      contents: read
+      checks: write
+    env:
+      PROVIDER_ID: snyk-open-source
+      CHECK_NAME: Snyk Open Source
+      CONTROL_ID: dependency-vulnerability
+      SNYK_OPEN_SOURCE_ARGS: ${{ vars.SNYK_OPEN_SOURCE_ARGS }}
+      PROOF_WORKING_DIRECTORY: ${{ vars.PROOF_WORKING_DIRECTORY || '.' }}
+      WITHHELD: ${{ github.event.pull_request.head.repo.full_name != github.repository && 'fork pull requests are not sent to Snyk because fork scanning has not been independently verified.' || '' }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      BASE_REF: refs/heads/${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Check out the trusted runtime from the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            .proof/adapter.py
+            .proof/provider_check.py
+            .proof/evaluate.py
+          sparse-checkout-cone-mode: false
+      - name: Require the trusted runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in adapter.py provider_check.py; do
+            if [[ -L trusted/.proof || -L "trusted/.proof/${file}" || ! -f "trusted/.proof/${file}" ]]; then
+              echo "::error::The default branch has no regular .proof/${file}; refresh the Proof runtime (tooling/install.py --refresh-existing) and merge it before this check can produce evidence." >&2
+              exit 1
+            fi
+          done
+      - name: Check out the pull request head as data
+        if: ${{ env.WITHHELD == '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      # Install the native executable directly: the setup action's eval wrapper
+      # would interpret shell syntax in candidate-controlled lockfile paths.
+      - name: Install the pinned Snyk CLI
+        if: ${{ env.WITHHELD == '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/snyk-cli"
+          curl --fail --silent --show-error --location \
+            --output "${RUNNER_TEMP}/snyk-cli/snyk" \
+            "https://github.com/snyk/cli/releases/download/v${SNYK_CLI_VERSION}/snyk-linux"
+          echo "${SNYK_CLI_SHA256}  ${RUNNER_TEMP}/snyk-cli/snyk" | sha256sum --check --strict
+          chmod +x "${RUNNER_TEMP}/snyk-cli/snyk"
+          echo "${RUNNER_TEMP}/snyk-cli" >> "${GITHUB_PATH}"
+      - name: Run Snyk Open Source through the trusted adapter
+        if: ${{ env.WITHHELD == '' }}
+        shell: bash
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          set -uo pipefail
+          # A minimal environment: the adapter and the CLI receive the credential and nothing else of the job.
+          /usr/bin/env -i \
+            PATH="${PATH}" HOME="${HOME}" CI=true \
+            SNYK_TOKEN="${SNYK_TOKEN}" SNYK_OPEN_SOURCE_ARGS="${SNYK_OPEN_SOURCE_ARGS}" \
+            python3 -I trusted/.proof/adapter.py snyk-open-source --data-only \
+            --target "candidate/${PROOF_WORKING_DIRECTORY}" \
+            --revision "${HEAD_SHA}" \
+            --timeout 1200 \
+            --evidence-dir "${RUNNER_TEMP}/evidence" \
+            --measurements "${RUNNER_TEMP}/measurements.json" | /usr/bin/tee "${RUNNER_TEMP}/scan.txt"
+          printf '### Snyk Open Source\n\n```text\n%s\n```\n' "$(/bin/cat "${RUNNER_TEMP}/scan.txt")" >> "${GITHUB_STEP_SUMMARY}"
+      - name: Record the result
+        id: evidence
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${WITHHELD}" ]]; then
+            source_args=(--withheld "${WITHHELD}")
+          else
+            source_args=(--fragment "${RUNNER_TEMP}/evidence/${PROVIDER_ID}.json")
+          fi
+          python3 -I trusted/.proof/provider_check.py evidence \
+            --provider-id "${PROVIDER_ID}" --check-name "${CHECK_NAME}" "${source_args[@]}" \
+            --control "${CONTROL_ID}" --measurements "${RUNNER_TEMP}/measurements.json" \
+            --output "${RUNNER_TEMP}/proof-evidence/proof-evidence.json"
+          python3 -I trusted/.proof/provider_check.py check \
+            --evidence "${RUNNER_TEMP}/proof-evidence/proof-evidence.json" --output "${RUNNER_TEMP}/check-run.json"
+          jq -r '"\(.check_name): \(.status) — \(.summary)"' "${RUNNER_TEMP}/proof-evidence/proof-evidence.json" >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload run-bound evidence
+        if: ${{ !cancelled() && steps.evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: proof-snyk-open-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/proof-evidence/proof-evidence.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Publish the Snyk Open Source check
+        if: ${{ !cancelled() && steps.evidence.outcome == 'success' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/check-runs" --input "${RUNNER_TEMP}/check-run.json" > /dev/null
+          # The provider check carries the verdict; this job fails too, so it never reads as a pass.
+          jq -e '.status == "passed"' "${RUNNER_TEMP}/proof-evidence/proof-evidence.json" > /dev/null

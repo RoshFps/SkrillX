@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run local Guardrails v2 producers and render revision-bound artifacts."""
+"""Run local Proof producers and render revision-bound artifacts."""
 
 from __future__ import annotations
 
@@ -37,10 +37,10 @@ def evaluator_module() -> Any:
     path = runtime_path(
         ROOT,
         scanner_path=Path(__file__),
-        installed_relative=Path(".guardrails/evaluate.py"),
-        source_relative=Path("guardrails/evaluate.py"),
+        installed_relative=Path(".proof/evaluate.py"),
+        source_relative=Path("proof/evaluate.py"),
     )
-    spec = importlib.util.spec_from_file_location("guardrails_v2_evaluator", path)
+    spec = importlib.util.spec_from_file_location("proof_v2_evaluator", path)
     if not spec or not spec.loader:
         raise ValueError(f"cannot load evaluator: {path}")
     module = importlib.util.module_from_spec(spec)
@@ -52,10 +52,10 @@ def producer_module() -> Any:
     path = runtime_path(
         ROOT,
         scanner_path=Path(__file__),
-        installed_relative=Path(".guardrails/produce.py"),
-        source_relative=Path("tooling/produce_guardrail_evidence.py"),
+        installed_relative=Path(".proof/produce.py"),
+        source_relative=Path("tooling/produce_proof_evidence.py"),
     )
-    spec = importlib.util.spec_from_file_location("guardrails_v2_producers", path)
+    spec = importlib.util.spec_from_file_location("proof_v2_producers", path)
     if not spec or not spec.loader:
         raise ValueError(f"cannot load producers: {path}")
     module = importlib.util.module_from_spec(spec)
@@ -209,7 +209,7 @@ def local_evidence(target: Path, revision: str, base_ref: str) -> dict[str, Any]
     results: dict[str, dict[str, dict[str, Any]]] = {}
     validators = target / "tooling" / "validators"
     if not validators.is_dir():
-        validators = target / ".guardrails" / "validators"
+        validators = target / ".proof" / "validators"
     for control_id, filename, producer in (
         ("repository-validation", "validate_repository.py", "local repository validation"),
         ("documentation-validation", "validate_documentation.py", "local documentation validation"),
@@ -241,8 +241,8 @@ def local_evidence(target: Path, revision: str, base_ref: str) -> dict[str, Any]
             }
         results[control_id] = {"repository-validator": record}
 
-    ground_truth_validator = target / ".guardrails" / "validate_ground_truth.py"
-    ground_truth_policy = target / ".guardrails" / "ground-truth-ai.yaml"
+    ground_truth_validator = target / ".proof" / "validate_ground_truth.py"
+    ground_truth_policy = target / ".proof" / "ground-truth-ai.yaml"
     if ground_truth_validator.exists() and ground_truth_policy.exists():
         command = [sys.executable, str(ground_truth_validator), "--policy", str(ground_truth_policy)]
         code, output = run(command, target)
@@ -277,6 +277,20 @@ def local_evidence(target: Path, revision: str, base_ref: str) -> dict[str, Any]
                     "status": scope["status"],
                     "evidence": [json.dumps(scope["metrics"], sort_keys=True)],
                 }
+                if "thresholds" in scope:
+                    metadata = {
+                        "version": 1,
+                        "metrics": scope["metrics"],
+                        "thresholds": scope["thresholds"],
+                    }
+                    try:
+                        evaluator_module().validate_change_scope(metadata, scope["status"])
+                    except ValueError:
+                        # Optional display measurements cannot invalidate the
+                        # producer's independently determined policy result.
+                        pass
+                    else:
+                        record["change_scope"] = metadata
             else:
                 record = {
                     "producer": "local change-scope inspection",
@@ -400,7 +414,7 @@ def scan_subject_contract(
 
 def detailed_output(card: dict[str, Any], evidence_path: str, report_path: str) -> str:
     lines = [
-        f"Guardrail Scan: {card['status']} — {card['decision'].upper()}",
+        f"Proof Scan: {card['status']} — {card['decision'].upper()}",
         f"Subject: {card['subject']['type']}@{card['subject']['revision']}",
         f"Policy: {card['policy']} / {card['operation']}",
     ]
@@ -414,7 +428,7 @@ def detailed_output(card: dict[str, Any], evidence_path: str, report_path: str) 
 
 def detailed_markdown(card: dict[str, Any], evidence_path: str) -> str:
     lines = [
-        "# Guardrail Scan Report", "", f"- Status: **{card['status']}**",
+        "# Proof Scan Report", "", f"- Status: **{card['status']}**",
         f"- Decision: **{card['decision'].upper()}**", f"- Evidence: `{evidence_path}`",
         "", "| Readiness | Mode | Capability — Provider | Evidence |", "| --- | --- | --- | --- |",
     ]
@@ -427,7 +441,7 @@ def detailed_markdown(card: dict[str, Any], evidence_path: str) -> str:
 
 def default_artifact_paths(target: Path, timestamp: datetime) -> tuple[Path, Path, Path]:
     stamp = timestamp.astimezone(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
-    directory = target / ".artifacts" / "guardrails"
+    directory = target / ".artifacts" / "proof"
     return (
         directory / f"evidence-{stamp}.json",
         directory / "evidence.json",
@@ -443,7 +457,7 @@ def add_artifact_locations(card: dict[str, Any], evidence_path: Path, report_pat
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run local Guardrails v2 producers")
+    parser = argparse.ArgumentParser(description="Run local Proof producers")
     parser.add_argument("--target", type=Path, default=Path("."))
     parser.add_argument("--policy", type=Path)
     parser.add_argument("--profiles", type=Path)
@@ -468,12 +482,12 @@ def main() -> int:
     def resolve(explicit: Path | None, consumer: str, shared: str) -> Path:
         return (target / explicit).resolve() if explicit else default_config_path(target, consumer, shared)
 
-    policy_path = resolve(args.policy, ".guardrails/policy.yaml", "guardrails/baseline.yaml")
-    profiles_path = resolve(args.profiles, ".guardrails/profiles.yaml", "policies/profiles.yaml")
-    catalog_path = resolve(args.catalog, ".guardrails/control-catalog.yaml", "policies/control-catalog.yaml")
-    providers_path = resolve(args.providers, ".guardrails/providers.yaml", "policies/provider-config.yaml")
+    policy_path = resolve(args.policy, ".proof/policy.yaml", "proof/baseline.yaml")
+    profiles_path = resolve(args.profiles, ".proof/profiles.yaml", "policies/profiles.yaml")
+    catalog_path = resolve(args.catalog, ".proof/control-catalog.yaml", "policies/control-catalog.yaml")
+    providers_path = resolve(args.providers, ".proof/providers.yaml", "policies/provider-config.yaml")
     evidence_path = (target / args.evidence).resolve() if args.evidence else default_evidence_path
-    evidence_dir = (target / args.evidence_dir).resolve() if args.evidence_dir else target / ".artifacts/guardrails/evidence"
+    evidence_dir = (target / args.evidence_dir).resolve() if args.evidence_dir else target / ".artifacts/proof/evidence"
     try:
         policy, profiles, catalog, provider_config = map(load, (policy_path, profiles_path, catalog_path, providers_path))
         evaluator = evaluator_module()
@@ -501,9 +515,9 @@ def main() -> int:
         if not args.evidence:
             latest_evidence_path.write_text(rendered_evidence, encoding="utf-8")
 
-        scorecard_path = ROOT / "tooling" / "guardrail_scorecard.py"
+        scorecard_path = ROOT / "tooling" / "proof_scorecard.py"
         if not scorecard_path.exists():
-            scorecard_path = target / ".guardrails" / "scorecard.py"
+            scorecard_path = target / ".proof" / "scorecard.py"
         command = [
             sys.executable, str(scorecard_path), "--policy", str(policy_path),
             "--profiles", str(profiles_path), "--catalog", str(catalog_path),

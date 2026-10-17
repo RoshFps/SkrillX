@@ -43,7 +43,7 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_python_unittest_flake8_and_alternative_managers(self):
         self.write("app.py", "x = 1\n")
-        self.write("test_app.py", "import unittest\n")
+        self.write("test_app.py", "import unittest\nclass Tests(unittest.TestCase):\n    def test_app(self):\n        self.assertTrue(True)\n")
         self.write(".flake8", "[flake8]\n")
         row = discovery.detect_python(self.target)
         self.assertEqual(row["commands"]["unit-tests"]["command"], "python3 -m unittest discover")
@@ -61,6 +61,74 @@ class DiscoveryTests(unittest.TestCase):
         self.write("pyproject.toml", "this is not toml [[[")
         row = discovery.detect_python(self.target)
         self.assertEqual(row["language"], "python")
+
+    def test_pytest_in_dependency_groups_selects_pytest(self):
+        self.write("pyproject.toml", '[dependency-groups]\ndev = ["pytest>=8", "ruff"]\n')
+        self.write("test_app.py", "def test_app():\n    assert False\n")
+        row = discovery.detect_python(self.target)
+        self.assertEqual(row["commands"]["unit-tests"]["command"], "python3 -m pytest")
+        self.assertEqual(row["commands"]["format-and-lint"]["command"], "ruff check .")
+
+    def test_test_filename_without_framework_does_not_propose_unittest(self):
+        self.write("app.py", "x = 1\n")
+        self.write("test_app.py", "def test_app():\n    assert False\n")
+        self.assertNotIn("unit-tests", discovery.detect_python(self.target)["commands"])
+
+    def test_unittest_cases_select_unittest(self):
+        self.write("pyproject.toml", "[project]\nname = 'x'\n")
+        for declaration, base in (("import unittest", "unittest.TestCase"),
+                                  ("import unittest as ut", "ut.TestCase"),
+                                  ("from unittest import TestCase", "TestCase"),
+                                  ("from unittest import TestCase as Case", "Case"),
+                                  ("import unittest as ut", "ut.IsolatedAsyncioTestCase"),
+                                  ("from unittest import IsolatedAsyncioTestCase as AsyncCase", "AsyncCase")):
+            with self.subTest(declaration=declaration):
+                method = "async def" if "Async" in base else "def"
+                self.write("test_app.py", f"{declaration}\nclass Tests({base}):\n    {method} test_app(self):\n        self.assertTrue(True)\n")
+                self.assertEqual(discovery.discover(self.target)["commands"]["unit-tests"]["command"],
+                                 "python3 -m unittest discover")
+
+    def test_unittest_helpers_and_pytest_shapes_do_not_select_unittest(self):
+        self.write("pyproject.toml", "[project]\nname = 'x'\n")
+        cases = (
+            "from unittest.mock import patch\ndef test_app():\n    assert False\n",
+            "import unittest.mock as mock\ndef test_app():\n    assert False\n",
+            "import unittest\nclass TestApp:\n    def test_app(self):\n        assert False\n",
+            "from unittest import TestCase\n",
+            "import unittest\nclass Empty(unittest.TestCase):\n    pass\n",
+            "import unittest\nclass Cases(unittest.TestCase):\n    def test_case(self):\n        pass\ndef test_pytest():\n    assert False\n",
+        )
+        for content in cases:
+            with self.subTest(content=content):
+                self.write("test_app.py", content)
+                self.assertNotIn("unit-tests", discovery.discover(self.target)["commands"])
+
+    def test_nonpackage_test_directory_does_not_propose_root_discovery(self):
+        self.write("pyproject.toml", "[project]\nname = 'x'\n")
+        self.write("tests/test_app.py", "import unittest\nclass Cases(unittest.TestCase):\n    def test_app(self):\n        pass\n")
+        self.assertNotIn("unit-tests", discovery.discover(self.target)["commands"])
+
+    def test_packaged_test_directories_allow_root_discovery(self):
+        self.write("pyproject.toml", "[project]\nname = 'x'\n")
+        self.write("tests/__init__.py", "")
+        self.write("tests/unit/__init__.py", "")
+        self.write("tests/unit/test_app.py", "import unittest\nclass Cases(unittest.TestCase):\n    def test_app(self):\n        pass\n")
+        self.assertEqual(discovery.discover(self.target)["commands"]["unit-tests"]["command"],
+                         "python3 -m unittest discover")
+        (self.target / "tests/__init__.py").unlink()
+        self.assertNotIn("unit-tests", discovery.discover(self.target)["commands"])
+
+    def test_mixed_framework_files_do_not_propose_partial_unittest_suite(self):
+        self.write("test_cases.py", "import unittest\nclass Cases(unittest.TestCase):\n    def test_case(self):\n        pass\n")
+        self.write("test_functions.py", "def test_function():\n    assert False\n")
+        self.assertNotIn("unit-tests", discovery.discover(self.target)["commands"])
+
+    def test_comments_and_invalid_test_files_do_not_select_unittest(self):
+        self.write("app.py", "x = 1\n")
+        for content in ("# import unittest\n", "import unittest\nthis isn't python\n"):
+            with self.subTest(content=content):
+                self.write("test_app.py", content)
+                self.assertNotIn("unit-tests", discovery.detect_python(self.target)["commands"])
 
     def test_node_package_managers_and_scripts(self):
         self.write("package.json", json.dumps({"scripts": {"test": "jest", "build": "tsc", "lint": "eslint ."}}))
@@ -89,7 +157,7 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_workflows_provider_configuration_and_integrations(self):
         self.write(".github/workflows/sonar.yml", "name: 'SonarQube'\njobs:\n  a:\n    steps:\n      - uses: SonarSource/sonarqube-scan-action@sha\n")
-        self.write(".github/workflows/build.yml", "# Guardrails v2 installer-owned workflow.\nname: Build\n")
+        self.write(".github/workflows/build.yml", "# Proof installer-owned workflow.\nname: Build\n")
         self.write(".github/workflows/notes.txt", "ignored")
         self.write("sonar-project.properties", "sonar.projectKey=x\n")
         self.write(".snyk", "")
@@ -119,12 +187,12 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(clients["codex"]["user_skills_dir"], str(home / ".codex" / "skills"))
         custom = discovery.detect_agent_clients(self.target, {"HOME": str(home), "CODEX_HOME": str(self.target / "cx"), "CLAUDE_CONFIG_DIR": str(self.target / "cl")})
         self.assertFalse(custom["codex"]["detected"])
-        self.write(".guardrails/policy.yaml", json.dumps({"version": 2}))
+        self.write(".proof/policy.yaml", json.dumps({"version": 2}))
         self.write("toolkit.toml", "")
         self.write("docs/ai/skills/qa/config.yaml", "apps: []\n")
         state = discovery.detect_toolkit_state(self.target)
-        self.assertTrue(state["guardrails_installed"])
-        self.assertEqual(state["guardrails_version"], 2)
+        self.assertTrue(state["proof_installed"])
+        self.assertEqual(state["proof_version"], 2)
         self.assertTrue(state["toolkit_toml"])
         self.assertFalse(state["toolkit_lock"])
         self.assertEqual(state["qa_configurations"], ["docs/ai/skills/qa/config.yaml"])
@@ -137,9 +205,9 @@ class DiscoveryTests(unittest.TestCase):
         self.write("pyproject.toml", "[project]\nname = 'x'\n")
         self.write("package.json", json.dumps({"scripts": {"test": "vitest"}}))
         found = discovery.discover(self.target, environment={"HOME": str(self.target)})
-        self.assertEqual(found["variables"]["GUARDRAILS_CODEQL_LANGUAGES"], "python,javascript")
-        self.assertEqual(found["variables"]["GUARDRAILS_UNIT_TEST_COMMAND"], "npm run test")
-        self.assertIn("GUARDRAILS_UNIT_TEST_COMMAND='npm run test'", discovery.render(found))
+        self.assertEqual(found["variables"]["PROOF_CODEQL_LANGUAGES"], "python,javascript")
+        self.assertEqual(found["variables"]["PROOF_UNIT_TEST_COMMAND"], "npm run test")
+        self.assertIn("PROOF_UNIT_TEST_COMMAND='npm run test'", discovery.render(found))
 
 
 if __name__ == "__main__":
@@ -149,6 +217,6 @@ if __name__ == "__main__":
         self.write("pyproject.toml", "[project]\nname = 'x'\n[tool.pytest.ini_options]\ntestpaths = ['tests']\n")
         self.write("package.json", json.dumps({"scripts": {"test": "vitest", "build": "vite build"}}))
         found = discovery.discover(self.target, environment={"HOME": str(self.target)})
-        self.assertEqual(found["variables"]["GUARDRAILS_UNIT_TEST_COMMAND"], "python3 -m pytest && npm run test")
-        self.assertEqual(found["variables"]["GUARDRAILS_BUILD_COMMAND"], "python3 -m compileall -q . && npm run build")
+        self.assertEqual(found["variables"]["PROOF_UNIT_TEST_COMMAND"], "python3 -m pytest && npm run test")
+        self.assertEqual(found["variables"]["PROOF_BUILD_COMMAND"], "python3 -m compileall -q . && npm run build")
         self.assertIn("pytest configuration or dependency; package.json scripts.test", found["commands"]["unit-tests"]["source"])

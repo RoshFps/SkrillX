@@ -1,6 +1,6 @@
 # Install with the `skrillx` CLI
 
-The `skrillx` command is one front door for Guardrails, shared skills, and
+The `skrillx` command is one front door for Proof, shared skills, and
 QA bootstrap. It is a facade: `init`, `doctor`, `check`, `providers`, `skills`,
 `qa`, and `update` dispatch to the existing installer, diagnostics, scanner,
 configuration, and skill sources under `tooling/`. It adds discovery, the
@@ -10,7 +10,7 @@ evaluation time.
 
 Three entry points use the same code: the CLI, the
 [`toolkit-setup` skill](../skills/toolkit-setup/SKILL.md) for Codex and
-Claude Code, and the [`SkrillX Setup` starter workflow](../workflows/README.md#starter-workflow)
+Claude Code, and the [`AI Toolkit Setup` starter workflow](../workflows/README.md#starter-workflow)
 for GitHub. Python 3.11+ is the only prerequisite.
 
 ## Get the CLI
@@ -19,13 +19,13 @@ The quickest way is to put the checkout's launcher on your `PATH`:
 
 ```bash
 git clone https://github.com/RoshFps/SkrillX.git
-bash SkrillX/tooling/install-cli.sh   # installs ~/.local/bin/skrillx
+bash SkrillX/tooling/install-cli.sh       # installs ~/.local/bin/skrillx
 skrillx --version
 ```
 
 `bash tooling/install-cli.sh --prefix DIR` installs somewhere else and `--uninstall`
 removes it. The wrapper runs the checkout, so `git pull` updates the command.
-Set `AI_TOOLKIT_PYTHON` to choose the interpreter (Python 3.11+).
+Set `SKRILLX_PYTHON` to choose the interpreter (Python 3.11+).
 
 On Windows, run `bash tooling/install-cli.sh` from **Git Bash** inside the cloned
 folder, then open a new Git Bash window before running `skrillx`. PowerShell cannot
@@ -48,7 +48,7 @@ python3 dist/skrillx.pyz --version
 ```
 
 The archive bundles the source subset installation needs. On first run it
-extracts that payload to `~/.cache/ai-toolkit/<checksum>/` (override with
+extracts that payload to `~/.cache/skrillx/<checksum>/` (override with
 `AI_TOOLKIT_CACHE`) and runs the CLI from there, so `init` copies real files
 into your repository exactly as a checkout does. Always verify a downloaded
 archive against its `.sha256` asset from the same pinned release; `update`
@@ -67,19 +67,32 @@ commands, existing workflows and provider integrations (SonarQube, Snyk,
 FOSSA, CodeQL, Semgrep, Gitleaks), documentation, and installed agent clients.
 In a polyglot repository the commands for one capability are chained with
 `&&` so every detected suite must run and pass.
+Python discovery reads development dependencies from `[dependency-groups]`
+as well as project dependencies, extras, and requirements files. It proposes
+pytest when declared. Without a pytest declaration, it proposes unittest only
+when every discovered test file contains explicit `unittest.TestCase` or
+`IsolatedAsyncioTestCase` classes with test methods, including normal import
+aliases. Imports of helpers such as `unittest.mock` do not establish a runner.
+Mixed suites containing standalone test functions or plain test classes, and
+unrecognized shapes such as custom base classes, need an explicitly configured
+test command; discovery does not guess a runner that would omit those tests.
+The default unittest command also requires `__init__.py` in every directory
+between nested test files and the repository root. Custom layouts without
+those package markers need an explicit command with the appropriate start
+directory.
 `init` previews the files it would write and applies them only after `--yes`
 or an interactive confirmation. Options:
 
 | Option | Effect |
 | --- | --- |
-| `--components guardrails,skills,qa` | Install a subset; each component is independently adoptable |
+| `--components proof,skills,qa` | Install a subset; each component is independently adoptable |
 | `--clients codex,claude-code` | Project skill directories to populate (`.agents/skills`, `.claude/skills`); defaults to detected clients |
 | `--skills starter\|all\|name,...` | Skills to install; the starter set is small and review-oriented |
 | `--profile github` | Add the optional GitHub provider profile |
 | `--no-actions` | Install the runtime without workflow files |
 | `--apply-variables` | Store discovered commands as GitHub repository variables with `gh` |
 
-On a repository that already has `.guardrails/`, `init` fills gaps only and
+On a repository that already has `.proof/`, `init` fills gaps only and
 records the installation; it never rewrites an installed runtime. Use `update`
 to refresh.
 
@@ -88,7 +101,7 @@ to refresh.
 | Command | What it does |
 | --- | --- |
 | `skrillx` | Prints a five-step quick start. |
-| `skrillx check --html` | Runs the scan, prints a summary, and writes `.artifacts/ai-toolkit/scorecard.html`. |
+| `skrillx check --html` | Runs the scan, prints a summary, and writes `.artifacts/skrillx/scorecard.html`. |
 | `skrillx report` | Shows the last check again without rescanning. |
 | `skrillx report --open` | Writes the HTML scorecard and opens it in your browser. |
 | `skrillx skills list` | Every skill with a one-line description on a terminal (`*` marks the starter set); one name per line when piped, or use `--long`. |
@@ -99,7 +112,7 @@ to refresh.
 The HTML scorecard is a single offline file (no network requests) with
 status filters, search, and light/dark themes; it only displays the
 evaluator's statuses and never recomputes them. `check` also saves the result
-card to `.artifacts/ai-toolkit/last-check.json`, which `report` reads.
+card to `.artifacts/skrillx/last-check.json`, which `report` reads.
 
 Terminal output is colored only on an interactive terminal. Pipes, CI logs,
 and `--json` stay plain; `--no-color` or `NO_COLOR=1` turns color off and
@@ -114,13 +127,23 @@ skrillx completion zsh  > "${fpath[1]}/_skrillx"
 skrillx completion fish > ~/.config/fish/completions/skrillx.fish
 ```
 
+### Where the CLI conveniences live
+
+- `tooling/ai_toolkit/style.py` decides when output is colored and strips color
+  for pipes, CI logs, and `--no-color`.
+- `tooling/ai_toolkit/dashboard.py` renders the offline HTML scorecard written by
+  `skrillx check --html` and `skrillx report`.
+- `tooling/ai_toolkit/completion.py` generates the shell completion scripts.
+- `tooling/run_tests.py` is the parallel test runner behind `tooling/test.sh`
+  (`-j N` sets workers, `-k NAME` selects modules).
+
 ### Repository commands stay in repository variables
 
-Discovered commands are printed as `gh variable set GUARDRAILS_..._COMMAND`
+Discovered commands are printed as `gh variable set PROOF_..._COMMAND`
 lines and, with `--apply-variables`, set through `gh`. They are never written
 into `toolkit.toml` or any committed file, so a pull request cannot change
 what CI executes. Local scans read the same names from the environment
-(`export GUARDRAILS_UNIT_TEST_COMMAND=...`).
+(`export PROOF_UNIT_TEST_COMMAND=...`).
 
 ### `toolkit.toml`
 
@@ -129,16 +152,16 @@ Commit this file. It holds only what nothing else owns:
 ```toml
 [toolkit]
 revision = "v2.2.0"
-components = ["guardrails", "skills", "qa"]
+components = ["proof", "skills", "qa"]
 
 [agents]
 clients = ["codex", "claude-code"]
 skills_dir = ".agents/skills"
 
-[guardrails]
-policy = ".guardrails/policy.yaml"
-providers = ".guardrails/providers.yaml"
-profiles = ".guardrails/profiles.yaml"
+[proof]
+policy = ".proof/policy.yaml"
+providers = ".proof/providers.yaml"
+profiles = ".proof/profiles.yaml"
 actions = true            # false after init --no-actions; update never adds workflows then
 github_profile = false    # true after init --profile github
 ```
@@ -146,13 +169,13 @@ github_profile = false    # true after init --profile github
 `actions` and `github_profile` record the installation mode chosen at `init`
 so `update` reproduces it even when a workflow file of the same name is
 consumer-owned or the installed policy is missing. Policy modes and provider
-selection stay in `.guardrails/` and change only through
-`.guardrails/configure.py` (or `skrillx providers select CAPABILITY=PROVIDER`).
+selection stay in `.proof/` and change only through
+`.proof/configure.py` (or `skrillx providers select CAPABILITY=PROVIDER`).
 
 ### `toolkit.lock.json`
 
 Commit this file too. It records the toolkit revision, installed components,
-and a SHA-256 for every managed file: the `.guardrails/` runtime, installed
+and a SHA-256 for every managed file: the `.proof/` runtime, installed
 workflows, and installed skills. `update` uses it to tell unmodified files
 (refreshed) from modified ones (preserved and reported) and unmanaged files
 (never touched). Installations made before the lock existed are bootstrapped
@@ -171,7 +194,7 @@ Each component and capability is reported as one of:
 | --- | --- | --- |
 | `installed` | Managed files are present | lock and filesystem |
 | `configured` | Required commands, workflows, and provider selections are declared | the existing setup diagnostic |
-| `verified` | Evidence bound to the current `HEAD` shows `passed` or `failed` from the authoritative provider | `.artifacts/guardrails/evidence.json` from `check`, or a CI scorecard |
+| `verified` | Evidence bound to the current `HEAD` shows `passed` or `failed` from the authoritative provider | `.artifacts/proof/evidence.json` from `check`, or a CI scorecard |
 
 Every gap prints one concrete next action. `verified` describes the evidence
 that exists; it is not a pass.
@@ -182,7 +205,7 @@ that exists; it is not a pass.
 python3 skrillx.pyz check --target .
 ```
 
-`check` runs the installed scanner (`.guardrails/scan.py`) and groups the
+`check` runs the installed scanner (`.proof/scan.py`) and groups the
 result: what ran and passed, what failed, what remains unverified (`blocked`
 or `no_result` with the producer's reason), and what is not activated. Each
 failed capability names the repair skill to run with the finding attached;
@@ -217,20 +240,53 @@ python3 skrillx.pyz update --target . --rollback
 
 `update` refreshes unmodified managed files from the running toolkit
 revision, preserves modified files and lists them as conflicts with the
-canonical version copied beside them under `.artifacts/ai-toolkit/conflicts/`,
-restores missing files (including a partially deleted `.guardrails/`), and
+canonical version copied beside them under `.artifacts/skrillx/conflicts/`,
+restores missing files (including a partially deleted `.proof/`), and
 rewrites the lock. Only skills the previous lock recorded are refreshed
 (their canonical files are rewritten; files you added inside the directory
 are kept) or restored when the directory was deleted; a directory you created
 under a canonical skill name is left alone and listed until you adopt it with
-`skrillx skills install`, which records project installs in the lock.
+`skrillx skills install`, which records project installs in the lock and
+adds the `skills` component (and `qa bootstrap` the `qa` component) to
+`toolkit.toml`, so a later `update` keeps managing them instead of treating
+them as removed. The install that first activates a component installs and
+records the selected skills for every client the configuration already lists,
+not only the client named on the command line, so `doctor` never reports a
+managed client with nothing behind it. Every destination and both records are
+checked before the first file is written (including that files a refresh would
+overwrite are writable), the component is adopted only after every client has
+its files and lock entries, and if an install or a record write still fails,
+the installed files, `toolkit.toml`, and the lock are restored together.
 Re-running `init` on an installed repository keeps the lock's baseline for
 files it did not rewrite, so your local edits still surface as conflicts
 later, and keeps every component and client already installed; removing one
-is a separate, explicit step. A backup of every managed file
-is kept under `.artifacts/ai-toolkit/backup/<timestamp>/`; `--rollback`
-restores it and the previous lock. Running `update` at the same revision with
-nothing changed is a no-op.
+is a separate, explicit step. Only the components named in that run install
+anything new: re-running `init --components proof` on a repository with a
+narrowly selected skill set leaves the selection alone, while asking for
+`skills` or `qa` again installs the default set for any client that lacks it.
+For the same reason a re-run without `skills` or `qa` never adopts a new
+agent client: a detected client is left alone and a client named with
+`--clients` is refused, because adopting one means installing skills for it.
+A managed skill whose directory is missing at re-init time keeps its lock
+entries, so the next `update` restores it instead of forgetting it.
+A preserved conflict records the offered canonical version's hash in the
+lock, so successive upgrades continue to preserve local edits and report
+conflicts. Accepting the offered `.toolkit` copy resolves that conflict for
+the next upgrade. This also applies to installations without a prior lock;
+the baseline never comes from the preserved local bytes.
+A backup of every managed file
+is kept under `.artifacts/skrillx/backup/<timestamp>-<unique-id>/`; even
+updates within the same second have separate backups. `--rollback`
+restores it and the previous lock. `update`, a project `skills install`, and
+`qa bootstrap` refuse before touching any file when `toolkit.toml` or
+`toolkit.lock.json` cannot be rewritten (either is a symlink, a directory, or
+another non-regular entry, or the file or its directory is not writable), and
+if writing them fails after the refresh, the managed
+files, configuration, and lock are all restored together so the tree never
+disagrees with the lock that describes it; the records are put back by
+replacing the directory entry, so a symlink that appeared in the meantime is
+never followed. Running `update` at the same
+revision with nothing changed is a no-op.
 
 ## Trust boundaries
 
@@ -238,8 +294,43 @@ nothing changed is a no-op.
   revision-bound evidence.
 - Commands live in repository variables and the local environment, never in
   committed files.
-- `.guardrails/` remains the public runtime contract; the CLI writes it
+- `.proof/` remains the public runtime contract; the CLI writes it
   through the installer and reads it through the installed scripts.
 - Credentials stay in GitHub secrets or the provider platform.
 - The archive is pinned by release tag and checksum; nothing is fetched at
   run time.
+
+## Installing and verifying action skills
+
+The standalone installer supports both agent clients. Preview a selected
+Claude Code install with `tooling/install-skills.sh --client claude-code
+--skill fix-ci --dry-run`; use `--client codex` for Codex. An explicit
+`--target` overrides the selected client's default skills directory.
+
+The five action skills ship seeded tasks and per-client `VERIFICATION.md`
+ledgers. Installation is not evidence that an agent completed a task.
+`tooling/validate-skills.py` rejects duplicate client rows and requires each
+verified row's Git revision to match the current skill bundle and fixture.
+Verified rows also require a real date, agent version, outcome, and an evidence
+link or explicit withholding reason. Both client rows remain unverified until
+representative runs are recorded.
+
+QA bootstrap copies plan and finding rules into the generated QA skill.
+Agent-authored rows may claim only agent provenance. Sanitized non-passing
+reports preserve the failure reason without passing the policy check;
+missing regressions and flaky results remain blocked. Commands from PR
+plans or findings are suggestions, not execution authority: use trusted
+repository configuration or an approved allowlist.
+
+QA CI checks out the exact PR base into `qa-trusted` for its prompt, skills,
+config, plans, and findings. All executable test intent, including exploratory
+prose, comes from that snapshot; missing trusted setup blocks execution. The
+app under test remains at PR head. This does not make the PR-editable QA
+workflow a tamper-resistant security gate.
+
+A standalone `address-pr-findings` install bundles review contracts but does
+not install sibling action skills. A routed finding blocks with the missing
+skill named until its required sibling is installed; triage is still available.
+
+Affirmative skill verification rows require Outcome `passed`; a failed, blocked,
+or inconclusive run must remain unverified even when its evidence is recorded.
