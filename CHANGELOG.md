@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to SkrillX (a fork of AI Software Toolkit) are documented here.
+All notable changes to SkrillX are documented here.
 
 The project follows [Semantic Versioning](https://semver.org/). Starting with
 1.0, incompatible changes to the documented public runtime, configuration,
@@ -8,9 +8,9 @@ or evidence contracts require a major release and migration guidance.
 
 ## [Unreleased]
 
-### SkrillX fork
+### SkrillX
 
-- Sync with upstream AI Software Toolkit `main` (11fab01), including credential
+- Adopt the latest Proof runtime, including credential
   isolation for the Snyk, FOSSA, and AI PR Review templates, the Proof rename,
   the `qa-bootstrap` and action skills, and the new scorecard measurements.
 - `skrillx` CLI 2.2.0: quick start and typo hints, colored output, a `check`
@@ -21,13 +21,11 @@ or evidence contracts require a major release and migration guidance.
   (`bin/skrillx`, `workflows/skrillx-setup.yml`, `SKRILLX_PYTHON`).
 - Semgrep scans pass `--disable-version-check` (and `--metrics off` for local
   scans), so the update check no longer stalls each scan for over a minute
-  inside the `--network none` container (carries over RoshFps/SkrillX#11).
+  inside the `--network none` container.
 - Add Windows install steps (Git Bash) to the README and `docs/install.md`.
 - Run Pylint error-level checks in `tooling/lint.sh` (`.pylintrc`).
 - Scope the setup workflow's write token to `git push` and `gh pr create`, compile
   validator glob patterns once, and make `tooling/test.sh` executable.
-- Restore the original author's copyright in `LICENSE` and `NOTICE`: Ravi Singh
-  and Roshan Immanuel are both credited, and `CONTRIBUTORS.md` links upstream.
 
 - Preserve consumer edits across successive ordinary toolkit upgrades, including
   installations first adopted without a lock. Unresolved conflicts keep their
@@ -316,7 +314,7 @@ or evidence contracts require a major release and migration guidance.
   QA publishes sanitized non-passing reasons while remaining unsuccessful,
   restricts agent-authored provenance, and rejects PR-supplied commands.
 
-- Brand the public PR scorecard page as AI Software Toolkit instead of
+- Brand the public PR scorecard page as SkrillX instead of
   Guardrails, matching the toolkit identity. Page content, badge URLs, bounded
   metadata, and evaluation semantics are unchanged.
 - Default installation guidance to Actions scorecard summaries and artifacts,
@@ -446,12 +444,12 @@ or evidence contracts require a major release and migration guidance.
   settings. Verify the Docker-mounted Git repository before accepting Gitleaks
   evidence so an unavailable mount cannot produce a false passing scan.
 
-- Rename the GitHub repository to `ravisingh11/ai-software-toolkit` and update
-  clone, release, security reporting, and Pages links. Add a migration guide
-  for existing clones, forks, workflows, and badges. Runtime contracts and
+- Rename the GitHub repository and update clone, release, security reporting,
+  and Pages links. Add a migration guide for existing clones, forks, workflows,
+  and badges. Runtime contracts and
   existing release tags are unchanged.
 
-- Introduce AI Software Toolkit as the umbrella identity for shared skills,
+- Introduce SkrillX as the umbrella identity for shared skills,
   QA workflows, standards, and Guardrails. Add a lifecycle vision and maturity
   map, with DORA measurement marked as aspirational. Preserve the existing
   engineering-standards repository URLs and Guardrails runtime contracts.
@@ -563,7 +561,7 @@ Initial public release.
 - Added engineering, QA, security, and repository-standards AI review guidance.
 - Added reusable engineering skills and an embedded Python consumer example.
 
-[0.1.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v0.1.0
-[0.2.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v0.2.0
-[1.0.0]: https://github.com/ravisingh11/ai-software-toolkit/releases/tag/v1.0.0
-[Unreleased]: https://github.com/ravisingh11/ai-software-toolkit/compare/v1.0.0...HEAD
+[0.1.0]: https://github.com/RoshFps/SkrillX/releases/tag/v0.1.0
+[0.2.0]: https://github.com/RoshFps/SkrillX/releases/tag/v0.2.0
+[1.0.0]: https://github.com/RoshFps/SkrillX/releases/tag/v1.0.0
+[Unreleased]: https://github.com/RoshFps/SkrillX/compare/v1.0.0...HEAD

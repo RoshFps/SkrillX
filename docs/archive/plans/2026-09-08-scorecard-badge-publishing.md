@@ -427,7 +427,7 @@ Set the repository variable and Pages build type:
 ```sh
 gh variable set GUARDRAILS_SCORECARD_BADGE_ENABLED --body true
 gh variable set GUARDRAILS_SCORECARD_BADGE_PAGES_MODE --body dedicated
-gh api --method POST repos/ravisingh11/engineering-standards/pages -f build_type=workflow
+gh api --method POST repos/RoshFps/SkrillX/pages -f build_type=workflow
 ```
 
 If Pages already exists, use the corresponding update endpoint with
@@ -439,7 +439,7 @@ type before triggering publication.
 Add the live score badge to `README.md` only after Pages is configured:
 
 ```markdown
-[![Latest PR Scorecard](https://ravisingh11.github.io/engineering-standards/guardrails-badge.svg)](https://ravisingh11.github.io/engineering-standards/)
+[![Latest PR Scorecard](https://roshfps.github.io/SkrillX/guardrails-badge.svg)](https://roshfps.github.io/SkrillX/)
 ```
 
 Push the proof branch and open a PR. Wait for its `Guardrail Scorecard`, then

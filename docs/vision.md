@@ -1,6 +1,6 @@
-# AI Software Toolkit: vision and scope
+# SkrillX: vision and scope
 
-AI Software Toolkit helps development, QA, security, and release teams turn
+SkrillX helps development, QA, security, and release teams turn
 AI-assisted work into software they can verify and maintain. It brings shared
 skills, standards, verification workflows, and the Proof evidence runtime
 together. Teams adopt the components that fit their repository and workflow.
@@ -51,7 +51,7 @@ the tree; no date promised).
 | Review skills (code, security, dependency, release, and others) | Shipped source catalog with installers for Codex and Claude Code | Choose a revision, install, supply application context; installation is not execution |
 | Action skills (`fix-ci`, `generate-unit-tests`, `fix-security-finding`, `dependency-upgrade`, `address-pr-findings`) | Shipped with fixtures and ledgers; **not verified in either client yet** | A recorded live run per client in each skill's `VERIFICATION.md` |
 | Agent-driven functional QA | Opt-in; `qa-bootstrap` shipped, plans and findings documented, FLAKY blocks | Run bootstrap, configure drivers and environments, execute the generated `qa`, inspect evidence; advisory-only |
-| Reference app | Python fixture exercises install, refresh, and local scorecards; nested CI templates are shipped but not live-verified. The separate Node reference app has its own evidence ([details](reference-app.md)); fixture QA and repair remain planned | Decide the lock refresh workflow before committing `toolkit.toml` to the demo |
+| Reference app | Python fixture exercises install, refresh, and local scorecards; nested CI templates are shipped but not live-verified. See the [reference app](reference-app.md) for details; fixture QA and repair remain planned | Decide the lock refresh workflow before committing `toolkit.toml` to the demo |
 | AI security guidance | Shipped policy | Configure and verify actual agent/runtime protections; policy text does not enable them |
 | Release and runtime assurance | Readiness skills shipped; several lifecycle capabilities remain [evidence-only contracts](proof/architecture.md#evidence-only-lifecycle-capabilities) | Implement and validate the missing producers |
 | DORA and AI delivery diagnostics | Planned; no measurement pipeline or dashboard exists | Define service boundaries and data sources, implement collection, validate attribution |

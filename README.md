@@ -1,4 +1,4 @@
-# AI Software Toolkit
+# SkrillX
 
 **Move fast. Prove it works.** Shared skills, QA workflows, and Proof checks for
 planning, building, testing, securing, and releasing software with AI.
@@ -6,7 +6,7 @@ planning, building, testing, securing, and releasing software with AI.
 [![License](https://img.shields.io/github/license/RoshFps/SkrillX?label=license)](LICENSE)
 [![Scorecard Workflow](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/SkrillX/actions/workflows/proof-scorecard.yml)
 
-AI Software Toolkit supports development, QA, security, and release teams.
+SkrillX supports development, QA, security, and release teams.
 Skills guide repeatable work, functional QA exercises application behavior,
 and Proof connects verification results to policy through revision-bound
 checks and readable scorecards. Your repository owns its architecture,
@@ -66,7 +66,7 @@ See the [changelog](CHANGELOG.md#unreleased) for details.
 | Verification | Produce evidence from tests, functional QA, and scanners | [Set up functional QA](skills/qa-bootstrap/SKILL.md) |
 | Proof | Evaluate evidence against policy and expose missing results | [Install and configure Proof](docs/quickstart.md) |
 | Providers | Use SonarQube scanner and quality-gate actions; use adapter-owned commands and reason codes for Snyk and FOSSA | [Providers](docs/providers/README.md) |
-| Reference app | Exercise installation and runtime behavior; inspect separate deployment evidence | [Reference app](docs/reference-app.md) |
+| Reference app | Exercise installation and runtime behavior | [Reference app](docs/reference-app.md) |
 | Measurement — aspiration | Learn whether delivery is improving across the lifecycle | [Vision and maturity](docs/vision.md) |
 
 QA helps shape acceptance criteria and risk coverage, explores behavior, and

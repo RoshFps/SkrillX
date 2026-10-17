@@ -1,6 +1,6 @@
 # Proof quick start
 
-This guide installs the Proof component of [AI Software Toolkit](vision.md).
+This guide installs the Proof component of [SkrillX](vision.md).
 For other entry points, [install skills](../skills/README.md#install-locally)
 or [set up functional QA](../skills/qa-bootstrap/SKILL.md) from a source revision
 containing those capabilities.
@@ -18,9 +18,7 @@ produce no result, not a pass.
 > [!NOTE]
 > This guide uses the Proof names, which no release contains yet, so step 1
 > clones `main`. v1.0.0 predates the rename and uses `.guardrails/` and
-> `GUARDRAILS_*`; to install it, follow the
-> [v1.0.0 quick start](https://github.com/ravisingh11/ai-software-toolkit/blob/v1.0.0/docs/quickstart.md).
-> To move an existing installation, see
+> `GUARDRAILS_*`. To move an existing installation, see
 > [migrating from Guardrails](proof/migrating-from-guardrails.md).
 
 The numbered steps below adapt that flow to **your own repository**. Use its
@@ -32,7 +30,7 @@ Clone the source, then run the installer from that checkout:
 
 ```sh
 git clone https://github.com/RoshFps/SkrillX.git
-cd ai-software-toolkit
+cd SkrillX
 python3 tooling/install.py --target /path/to/repo --dry-run
 python3 tooling/install.py --target /path/to/repo
 ```
@@ -420,7 +418,7 @@ under normal repository access.
 Publishing is optional reporting and never influences the
 scorecard decision or branch rules.
 
-The report page uses the AI Software Toolkit name and AI mark. It presents
+The report page uses the SkrillX name and AI mark. It presents
 the policy status and decision, separate active,
 enforced, and advisory counts, readable UTC timestamps, and a link to the
 source CI run. Verification details expand to show the subject digest; summary

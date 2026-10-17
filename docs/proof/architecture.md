@@ -1,6 +1,6 @@
 # Proof architecture
 
-Proof is the evidence and policy component of [AI Software Toolkit](../vision.md).
+Proof is the evidence and policy component of [SkrillX](../vision.md).
 This document defines that component's runtime contracts; the toolkit also
 provides skills and QA workflows with their own adoption paths.
 

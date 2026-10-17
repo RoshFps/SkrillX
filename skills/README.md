@@ -1,7 +1,7 @@
-# AI Software Toolkit Skills
+# SkrillX Skills
 
 This directory is the canonical source for reusable agent skills in the
-AI Software Toolkit. Skills are small, task-specific operating
+SkrillX. Skills are small, task-specific operating
 guides that tell Codex how to perform repeatable engineering, security,
 QA, release, and repository administration work.
 

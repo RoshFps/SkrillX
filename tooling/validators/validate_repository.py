@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the canonical AI Software Toolkit repository."""
+"""Validate the canonical SkrillX repository."""
 
 from __future__ import annotations
 
