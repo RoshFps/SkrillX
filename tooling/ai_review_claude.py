@@ -247,7 +247,7 @@ def run(environment: dict[str, str], client: Any = None) -> int:
         if len(diff) > MAX_DIFF_CHARACTERS:
             raise ReviewError(f"the diff has {len(diff):,} characters, above the {MAX_DIFF_CHARACTERS:,} review limit; split the pull request")
         if client is None:
-            import anthropic  # Imported lazily: only the review step installs the SDK.
+            import anthropic  # pylint: disable=import-error  # Imported lazily: only the review step installs the SDK.
             client = anthropic.Anthropic()
         review = request(client, model, system_prompt(role, ROLES[role][1], changed_paths(Path(target), base, head)), diff)
         findings = validated_findings(review)
