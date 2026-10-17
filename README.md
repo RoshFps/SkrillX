@@ -3,7 +3,7 @@
 **Move fast. Prove it works.** Shared skills, QA workflows, and guardrails for
 planning, building, testing, securing, and releasing software with AI.
 
-[![License](https://img.shields.io/github/license/RoshFps/SkrillX?label=license)](LICENSE)
+ 
 [![Scorecard Workflow](https://github.com/RoshFps/SkrillX/actions/workflows/guardrails-scorecard.yml/badge.svg?event=pull_request_target)](https://github.com/RoshFps/SkrillX/actions/workflows/guardrails-scorecard.yml)
 
 SkrillX supports development, QA, security, and release teams.
