@@ -27,6 +27,12 @@ skrillx --version
 removes it. The wrapper runs the checkout, so `git pull` updates the command.
 Set `AI_TOOLKIT_PYTHON` to choose the interpreter (Python 3.11+).
 
+On Windows, run `bash tooling/install-cli.sh` from **Git Bash** inside the cloned
+folder, then open a new Git Bash window before running `skrillx`. PowerShell cannot
+run the `.sh` installer, and the `bash` it finds may be WSL, which cannot see
+`C:\...` paths. Without Git Bash, call the CLI with Python from PowerShell:
+`python C:\path\to\SkrillX\tooling\ai_toolkit --version`.
+
 You can also run it directly from a source checkout:
 
 ```bash

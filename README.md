@@ -24,6 +24,22 @@ cd /path/to/your/repo
 skrillx                               # prints the quick start
 ```
 
+On Windows, run the install from **Git Bash** (installed with Git for Windows), not
+PowerShell. PowerShell cannot run the `.sh` installer, and `bash` in PowerShell can
+point to WSL, which cannot see the Windows checkout path. Inside the cloned folder:
+
+```sh
+bash tooling/install-cli.sh           # then open a new Git Bash window
+skrillx                               # prints the quick start
+```
+
+Without Git Bash, run the CLI from PowerShell directly. Replace `C:\path\to\SkrillX`
+with your clone, and use `py` if `python` is not on your PATH:
+
+```powershell
+python C:\path\to\SkrillX\tooling\ai_toolkit --version
+```
+
 | Step | Command | What happens |
 | --- | --- | --- |
 | 1 | `skrillx discover` | Detects languages, build/test/lint commands, workflows, and agent clients. Read-only. |
