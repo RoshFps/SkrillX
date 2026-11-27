@@ -61,7 +61,7 @@ jobs:
           fi
 
       - name: Run SonarQube analysis
-        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        uses: SonarSource/sonarqube-scan-action@70bad232163b09d998ea0707ee80c0ec80798c16 # v8.5.1
         with:
           projectBaseDir: ${{ env.PROJECT_BASE_DIRECTORY }}
           args: ${{ env.SONAR_ARGS }}
